@@ -8,7 +8,7 @@
 name: YCH
 
 # The smaller line under it, e.g. a species or a title.  Up to 10 characters.
-species: Grungler
+species: Plank
 
 # Scan-me pages.  Each is a 29x29 QR code with the title and label beside it.
 links:

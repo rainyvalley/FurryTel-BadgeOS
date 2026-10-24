@@ -15,9 +15,9 @@ as big QR codes, pictures and a scratch note, and a few games for when you are w
 
   ![The GitHub link card](docs/link-card.png)
 
-- **Games**: Snake, Flappy, Crossy (a new level every ten lanes), and a knock-off Tetris. The D-pad
-  plays; three Lefts leave a game so a stray press does not (in Tetris, Left pauses, so three
-  Downs leave). Tetris is drawn sideways — turn the badge clockwise to play:
+- **Games**: Snake, Flappy, Crossy, and a knock-off Tetris. The D-pad plays; three Lefts leave a game
+  so a stray press does not (in Tetris, three "lefts" at the new view leaves). Tetris is drawn
+  sideways — turn the badge clockwise to play:
 
   ![The Tetris start screen and a game in progress, sideways](docs/tetris.png)
 - **Colors**: presets and RGB sliders for the backlight, plus a separate color for the flash on
@@ -34,7 +34,7 @@ Everything personal is in [`badge.yaml`](badge.yaml):
 
 ```yaml
 name: YCH             # up to 8 characters look best; longer names use a narrower font
-species: Grungler     # up to 10 characters
+species: Plank        # up to 10 characters
 
 links:
   - title: GitHub

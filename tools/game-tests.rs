@@ -365,6 +365,8 @@ mod record_tests {
         data.main = [1, 2, 3];
         data.flash = [4, 5, 6];
         data.rainbow = true;
+        data.led_mode = 2;
+        data.led_levels = [10, 20, 30];
         data.set_note("hello badge");
 
         let mut buffer = [0; RECORD_MAX];
@@ -374,6 +376,8 @@ mod record_tests {
         assert_eq!(decoded.main, [1, 2, 3]);
         assert_eq!(decoded.flash, [4, 5, 6]);
         assert!(decoded.rainbow);
+        assert_eq!(decoded.led_mode, 2);
+        assert_eq!(decoded.led_levels, [10, 20, 30]);
         assert_eq!(decoded.note(), "hello badge");
     }
 
@@ -401,6 +405,30 @@ mod record_tests {
         let mut bad_checksum = buffer;
         bad_checksum[13] ^= 0x01;
         assert!(record::decode(&bad_checksum[..len]).is_none());
+    }
+
+    #[test]
+    fn a_first_version_record_still_loads() {
+        // the old layout had no LED settings: magic, version, rainbow, colors, note, checksum
+        let mut buffer = [0u8; RECORD_MAX];
+        buffer[0..4].copy_from_slice(&record::MAGIC.to_le_bytes());
+        buffer[4] = 1;
+        buffer[5] = 0;
+        buffer[6..9].copy_from_slice(&[1, 2, 3]);
+        buffer[9..12].copy_from_slice(&[4, 5, 6]);
+        buffer[12] = 2;
+        buffer[13..15].copy_from_slice(b"hi");
+        let checksum = buffer[..15]
+            .iter()
+            .fold(0u32, |sum, &byte| sum.wrapping_add(u32::from(byte)));
+        buffer[15..19].copy_from_slice(&checksum.to_le_bytes());
+
+        let decoded = record::decode(&buffer[..19]).expect("decodes");
+        assert_eq!(decoded.main, [1, 2, 3]);
+        assert_eq!(decoded.flash, [4, 5, 6]);
+        assert_eq!(decoded.note(), "hi");
+        assert_eq!(decoded.led_mode, 0);
+        assert_eq!(decoded.led_levels, record::DEFAULT_LEDS);
     }
 
     #[test]

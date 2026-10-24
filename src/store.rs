@@ -47,6 +47,14 @@ pub fn set_note(note: &str) {
     DATA.lock(|slot| slot.borrow_mut().set_note(note));
 }
 
+pub fn set_leds(mode: u8, levels: [u8; 3]) {
+    DATA.lock(|slot| {
+        let mut data = slot.borrow_mut();
+        data.led_mode = mode;
+        data.led_levels = levels;
+    });
+}
+
 /// Write the current settings to flash.  This takes a few milliseconds and stops the world while
 /// the flash is erased and programmed.
 pub fn save() {

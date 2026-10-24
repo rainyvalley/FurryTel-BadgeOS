@@ -4,18 +4,26 @@
 pub const DEFAULT_MAIN: [u8; 3] = [80, 32, 120];
 /// The usual color it blinks on a button press.
 pub const DEFAULT_FLASH: [u8; 3] = [140, 0, 0];
+/// The usual brightness of the three discrete LEDs.
+pub const DEFAULT_LEDS: [u8; 3] = [0x50, 0x50, 0x50];
 
 pub const MAGIC: u32 = 0x4241_4447;
-pub const VERSION: u8 = 1;
+/// 2 adds the LED mode and brightnesses; 1 is still readable.
+pub const VERSION: u8 = 2;
 pub const NOTE_LEN: usize = 128;
-/// Magic, version, rainbow, two colors, note length, note, checksum.
-pub const RECORD_MAX: usize = 17 + NOTE_LEN;
+
+/// magic, version, rainbow, two colors, LED mode, three LED levels, note length, note, checksum
+const HEADER: usize = 17;
+pub const RECORD_MAX: usize = HEADER + 4 + NOTE_LEN;
 
 #[derive(Clone)]
 pub struct Data {
     pub main: [u8; 3],
     pub flash: [u8; 3],
     pub rainbow: bool,
+    /// index into the LEDs screen's modes: random, solid, chase, button
+    pub led_mode: u8,
+    pub led_levels: [u8; 3],
     note: [u8; NOTE_LEN],
     note_len: u8,
 }
@@ -25,6 +33,8 @@ pub const fn defaults() -> Data {
         main: DEFAULT_MAIN,
         flash: DEFAULT_FLASH,
         rainbow: false,
+        led_mode: 0,
+        led_levels: DEFAULT_LEDS,
         note: [0; NOTE_LEN],
         note_len: 0,
     }
@@ -54,44 +64,83 @@ pub fn encode(data: &Data, buffer: &mut [u8; RECORD_MAX]) -> usize {
     buffer[5] = u8::from(data.rainbow);
     buffer[6..9].copy_from_slice(&data.main);
     buffer[9..12].copy_from_slice(&data.flash);
-    buffer[12] = len as u8;
-    buffer[13..13 + len].copy_from_slice(&data.note[..len]);
+    buffer[12] = data.led_mode;
+    buffer[13..16].copy_from_slice(&data.led_levels);
+    buffer[16] = len as u8;
+    buffer[HEADER..HEADER + len].copy_from_slice(&data.note[..len]);
 
-    let checksum = buffer[..13 + len]
-        .iter()
-        .fold(0u32, |sum, &byte| sum.wrapping_add(u32::from(byte)));
-    buffer[13 + len..17 + len].copy_from_slice(&checksum.to_le_bytes());
+    let checksum = checksum(&buffer[..HEADER + len]);
+    buffer[HEADER + len..HEADER + 4 + len].copy_from_slice(&checksum.to_le_bytes());
 
-    17 + len
+    HEADER + 4 + len
 }
 
 pub fn decode(buffer: &[u8]) -> Option<Data> {
-    if buffer.len() < 13 {
-        return None;
-    }
-    if u32::from_le_bytes(buffer[0..4].try_into().ok()?) != MAGIC || buffer[4] != VERSION {
+    if buffer.len() < 5 || u32::from_le_bytes(buffer[0..4].try_into().ok()?) != MAGIC {
         return None;
     }
 
-    let len = buffer[12] as usize;
-    if len > NOTE_LEN || 17 + len > buffer.len() {
+    match buffer[4] {
+        1 => decode_v1(buffer),
+        2 => decode_v2(buffer),
+        _ => None,
+    }
+}
+
+fn decode_v2(buffer: &[u8]) -> Option<Data> {
+    if buffer.len() < HEADER {
+        return None;
+    }
+    let len = buffer[16] as usize;
+    if len > NOTE_LEN || HEADER + 4 + len > buffer.len() {
+        return None;
+    }
+    if stored_checksum(buffer, HEADER, len) != checksum(&buffer[..HEADER + len]) {
         return None;
     }
 
-    let checksum = u32::from_le_bytes(buffer[13 + len..17 + len].try_into().ok()?);
-    let expected = buffer[..13 + len]
-        .iter()
-        .fold(0u32, |sum, &byte| sum.wrapping_add(u32::from(byte)));
-    if checksum != expected {
-        return None;
-    }
-
-    // a note that is not valid UTF-8 is dropped, but the colors are still worth keeping
-    let note = core::str::from_utf8(&buffer[13..13 + len]).unwrap_or("");
     let mut data = defaults();
     data.main = [buffer[6], buffer[7], buffer[8]];
     data.flash = [buffer[9], buffer[10], buffer[11]];
     data.rainbow = buffer[5] != 0;
-    data.set_note(note);
+    data.led_mode = buffer[12];
+    data.led_levels = [buffer[13], buffer[14], buffer[15]];
+    data.set_note(core::str::from_utf8(&buffer[HEADER..HEADER + len]).unwrap_or(""));
     Some(data)
+}
+
+/// The first layout, which had no LED settings.
+fn decode_v1(buffer: &[u8]) -> Option<Data> {
+    const V1_HEADER: usize = 13;
+    if buffer.len() < V1_HEADER {
+        return None;
+    }
+    let len = buffer[12] as usize;
+    if len > NOTE_LEN || V1_HEADER + 4 + len > buffer.len() {
+        return None;
+    }
+    if stored_checksum(buffer, V1_HEADER, len) != checksum(&buffer[..V1_HEADER + len]) {
+        return None;
+    }
+
+    let mut data = defaults();
+    data.main = [buffer[6], buffer[7], buffer[8]];
+    data.flash = [buffer[9], buffer[10], buffer[11]];
+    data.rainbow = buffer[5] != 0;
+    data.set_note(core::str::from_utf8(&buffer[V1_HEADER..V1_HEADER + len]).unwrap_or(""));
+    Some(data)
+}
+
+fn checksum(bytes: &[u8]) -> u32 {
+    bytes
+        .iter()
+        .fold(0u32, |sum, &byte| sum.wrapping_add(u32::from(byte)))
+}
+
+fn stored_checksum(buffer: &[u8], header: usize, len: usize) -> u32 {
+    u32::from_le_bytes(
+        buffer[header + len..header + 4 + len]
+            .try_into()
+            .expect("length checked by the caller"),
+    )
 }

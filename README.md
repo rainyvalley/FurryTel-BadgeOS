@@ -95,7 +95,7 @@ flashing your own badge.
 | Games | D-pad plays, Center starts/pauses/retries, three Lefts quit (Flappy flaps on Center) |
 | Tetris | turn the badge clockwise — the buttons turn with it: up=right, down=left, left=pause, right=drops to the bottom, Center rotates |
 | Colors | Left/Right pick a field, Up/Down change it, Center saves and finishes |
-| LEDs | Left/Right pick a field, Up/Down change it, Center finishes (not saved) |
+| LEDs | Left/Right pick a field, Up/Down change it, Center saves and finishes |
 | About / Status | any button turns the page or leaves |
 | Bootloader | Center reboots into USB bootloader, any other button leaves |
 

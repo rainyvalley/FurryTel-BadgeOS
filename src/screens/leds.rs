@@ -1,6 +1,7 @@
 use embedded_graphics::{Drawable, geometry::Point, text::Text};
 
 use crate::discrete;
+use crate::store;
 use crate::ui::{self, Button, Canvas, Response, Screen};
 
 const MODES: [&str; 4] = ["RANDOM", "SOLID", "CHASE", "BUTTON"];
@@ -19,14 +20,16 @@ pub struct Leds {
 
 impl Leds {
     pub fn new() -> Self {
+        let saved = store::data();
         Self {
             selected: 0,
-            mode: 0,
-            levels: [0x50; 3],
+            mode: usize::from(saved.led_mode).min(MODES.len() - 1),
+            levels: saved.led_levels,
         }
     }
 
     fn apply(&self) {
+        store::set_leds(self.mode as u8, self.levels);
         discrete::set(match self.mode {
             0 => discrete::Mode::Random,
             1 => discrete::Mode::Solid(self.levels),
@@ -96,7 +99,10 @@ impl Screen for Leds {
             Button::Down => self.step(false),
             Button::Left => self.selected = (self.selected + FIELDS - 1) % FIELDS,
             Button::Right => self.selected = (self.selected + 1) % FIELDS,
-            Button::Center => return Response::Exit,
+            Button::Center => {
+                store::save();
+                return Response::Exit;
+            }
         }
         Response::Redraw
     }

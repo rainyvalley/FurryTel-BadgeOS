@@ -28,9 +28,20 @@ as big QR codes, pictures and a scratch note, and a few games for when you are w
   bootloader for reflashing.
 - **A secret**: enter ↑↑↓↓←→←→●● on the home screen to open Snake.
 
-## Make it yours
+## Download, Customize, Flash
 
-Everything personal is in [`badge.yaml`](badge.yaml):
+### 1. Download
+
+```sh
+mkdir badgeos && cd badgeos
+curl -L https://github.com/rainyvalley/badgeos/archive/refs/heads/main.tar.gz | tar -xz --strip-components=1
+```
+
+With git instead: `git clone https://github.com/rainyvalley/badgeos.git`.
+
+### 2. Customize
+
+Everything personal is in [`badge.yaml`](badge.yaml) — open it in any text editor:
 
 ```yaml
 name: YCH             # up to 8 characters look best; longer names use a narrower font
@@ -54,12 +65,12 @@ Pictures are fitted inside the screen, centred, and turned into black and white;
 small unless you set `scale: 2` (or use `dither: true` / `threshold: 128` for a different look).
 Logos and line art work best.
 
-Then rebuild:
+Then build the firmware:
 
 ```sh
-rustup target add thumbv6m-none-eabi                     # once; rust-toolchain.toml pins the rest
-python3 -m pip install --user pyyaml pillow qrcode       # or use a virtualenv
-python3 tools/build.py            # writes dist/badgeos.uf2
+rustup target add thumbv6m-none-eabi                 # once; rust-toolchain.toml pins the rest
+python3 -m pip install --user pyyaml pillow qrcode   # or use a virtualenv
+python3 tools/build.py                               # writes dist/badgeos.uf2
 ```
 
 `tools/build.py` regenerates the QR codes and pictures, compiles the firmware, and wraps it as a
@@ -76,7 +87,7 @@ python3 tools/build.py --config badges/someone.yaml   # writes dist/someone.uf2
 Only one config is generated at a time (`src/generated.rs`), so rebuild with your own before
 flashing your own badge.
 
-## Flashing
+### 3. Flash
 
 1. Put the badge in bootloader mode — either hold the small **BOOTSEL** button on the board while
    plugging the USB cable in, or pick **Bootloader** in the badge's menu and press Center.

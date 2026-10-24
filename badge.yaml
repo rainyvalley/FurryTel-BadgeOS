@@ -1,0 +1,25 @@
+# Everything the badge shows comes from this file.  After editing it, run:
+#
+#     python3 tools/build.py
+#
+# which regenerates src/generated.rs, builds the firmware, and writes dist/badgeos.uf2.
+
+# The big line on the home screen.  Up to 8 characters look best; longer names shrink to fit.
+name: YCH
+
+# The smaller line under it, e.g. a species or a title.  Up to 10 characters.
+species: Grungler
+
+# Scan-me pages.  Each is a 29x29 QR code with the title and label beside it.
+links:
+  - title: GitHub
+    url: https://github.com/rainyvalley
+
+# Pictures in the Files screen.  Images are fitted inside the screen, centred, and turned into
+# one bit: dark pixels are ink.  `scale: 2` draws two screen pixels per source pixel, which keeps
+# chunky art chunky.  `dither: true` uses error diffusion instead of a hard threshold.
+pictures:
+  - name: Paws
+    image: art/paws.png
+  - name: FurryTel
+    image: art/furrytel.png

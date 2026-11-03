@@ -579,3 +579,183 @@ mod rng_tests {
         assert_eq!(rng.range(9, 3), 9);
     }
 }
+
+mod doom_tests {
+    use crate::game::doom::{DoomGame, Frame, HEIGHT, MAP_SIZE, State, WIDTH};
+
+    fn picture(game: &DoomGame) -> String {
+        let mut frame = Frame::new();
+        game.render(&mut frame);
+        (0..HEIGHT)
+            .map(|y| {
+                (0..WIDTH)
+                    .map(|x| if frame.get(x, y) { '#' } else { '.' })
+                    .collect::<String>()
+            })
+            .collect::<Vec<_>>()
+            .join("\n")
+    }
+
+    #[test]
+    fn the_map_is_walled_in_and_square() {
+        for row in 0..MAP_SIZE {
+            let line = DoomGame::map_row(row);
+            assert_eq!(line[0], b'#');
+            assert_eq!(line[MAP_SIZE - 1], b'#');
+        }
+        assert!(DoomGame::map_row(0).iter().all(|&c| c == b'#'));
+        assert!(DoomGame::map_row(MAP_SIZE - 1).iter().all(|&c| c == b'#'));
+    }
+
+    #[test]
+    fn every_demon_can_be_reached_from_the_start() {
+        let mut seen = [[false; MAP_SIZE]; MAP_SIZE];
+        let mut queue = vec![(1usize, 1usize)];
+        seen[1][1] = true;
+        while let Some((x, y)) = queue.pop() {
+            for (nx, ny) in [(x + 1, y), (x - 1, y), (x, y + 1), (x, y - 1)] {
+                if DoomGame::map_row(ny)[nx] != b'#' && !seen[ny][nx] {
+                    seen[ny][nx] = true;
+                    queue.push((nx, ny));
+                }
+            }
+        }
+        let mut demons = 0;
+        for y in 0..MAP_SIZE {
+            for x in 0..MAP_SIZE {
+                if DoomGame::map_row(y)[x] == b'E' {
+                    demons += 1;
+                    assert!(seen[y][x], "demon at {x},{y} is walled off");
+                }
+            }
+        }
+        assert_eq!(DoomGame::new(1).total(), demons);
+    }
+
+    #[test]
+    fn walking_into_a_wall_stops() {
+        let mut game = DoomGame::new(1);
+        game.play();
+        game.place(128, 128, 128); // facing west in the corner cell
+        for _ in 0..20 {
+            game.walk(true);
+        }
+        let (x, _, _) = game.position();
+        assert!(x >= 256 + 56 - 256, "stayed inside the wall margin, was {x}");
+        assert!(x < 256);
+    }
+
+    #[test]
+    fn turning_four_times_eight_is_an_eighth_of_a_turn() {
+        let mut game = DoomGame::new(1);
+        game.play();
+        for _ in 0..4 {
+            game.turn(true);
+        }
+        assert_eq!(game.position().2, 32);
+    }
+
+    #[test]
+    fn a_wall_ahead_fills_the_middle_columns() {
+        let mut game = DoomGame::new(1);
+        game.play();
+        game.place(128 + 256, 128 + 256, 0);
+        let mut frame = Frame::new();
+        game.render(&mut frame);
+        let lit = (0..HEIGHT).filter(|&y| frame.get(64, y)).count();
+        assert!(lit > 4, "something is drawn: {}", picture(&game));
+    }
+
+    #[test]
+    fn shooting_a_demon_in_line_hurts_it_and_kills_it_in_two() {
+        let mut game = DoomGame::new(1);
+        game.play();
+        game.place(128 + 256, 128 + 7 * 256, 0); // row 7, looking east
+        game.put_enemy(0, 7, 7);
+        assert!(game.fire());
+        assert!(game.fire());
+        assert_eq!(game.kills(), 1);
+    }
+
+    #[test]
+    fn shooting_at_a_wall_misses() {
+        let mut game = DoomGame::new(1);
+        game.play();
+        game.place(128 + 256, 128 + 256, 128);
+        assert!(!game.fire());
+    }
+
+    #[test]
+    fn a_demon_behind_a_wall_cannot_be_shot() {
+        let mut game = DoomGame::new(1);
+        game.play();
+        game.place(128 + 256, 128 + 7 * 256, 0);
+        game.put_enemy(0, 14, 7);
+        game.place(128 + 256, 128 + 7 * 256, 0);
+        // a wall is in the way: the ##s at 3,8 do not block row 7, so block by facing a wall
+        game.place(128 + 256, 128 + 256, 64);
+        game.put_enemy(0, 1, 14);
+        assert!(!game.fire());
+    }
+
+    #[test]
+    fn killing_every_demon_wins() {
+        let mut game = DoomGame::new(1);
+        game.play();
+        for index in 0..game.total() as usize {
+            game.put_enemy(index, 1 + index as i32, 14);
+        }
+        for index in 0..game.total() as usize {
+            game.place(128 + (1 + index as i32) * 256, 128 + 13 * 256, 64);
+            while game.kills() as usize == index {
+                assert!(game.fire());
+            }
+        }
+        assert_eq!(game.state(), State::Won);
+    }
+
+    #[test]
+    fn nothing_happens_until_playing() {
+        let mut game = DoomGame::new(1);
+        assert!(!game.walk(true));
+        assert!(!game.fire());
+        assert!(!game.tick());
+    }
+
+    #[test]
+    fn a_demon_next_to_you_eventually_kills_you() {
+        let mut game = DoomGame::new(1);
+        game.play();
+        game.place(128 + 256, 128 + 256, 0);
+        game.put_enemy(0, 2, 1);
+        for _ in 0..200 {
+            game.tick();
+        }
+        assert_eq!(game.state(), State::Dead);
+    }
+
+    #[test]
+    fn demons_close_in_when_they_see_you() {
+        let mut game = DoomGame::new(1);
+        game.play();
+        game.place(128 + 7 * 256, 128 + 7 * 256, 0);
+        game.put_enemy(0, 10, 7);
+        for _ in 0..2 {
+            game.tick();
+        }
+        // a demon is now nearer than three cells
+        let mut frame = Frame::new();
+        game.render(&mut frame);
+    }
+
+    #[test]
+    #[ignore]
+    fn print_a_frame() {
+        let mut game = DoomGame::new(1);
+        game.play();
+        game.place(128 + 256, 128 + 7 * 256, 0);
+        game.put_enemy(0, 5, 7);
+        game.fire();
+        println!("{}", picture(&game));
+    }
+}

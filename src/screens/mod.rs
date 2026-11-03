@@ -3,6 +3,7 @@
 mod about;
 mod bootloader;
 mod crossy;
+mod doom;
 mod files;
 mod flappy;
 mod home;
@@ -16,6 +17,7 @@ mod tetris;
 pub use about::About;
 pub use bootloader::Bootloader;
 pub use crossy::Crossy;
+pub use doom::Doom;
 pub use files::Files;
 pub use flappy::Flappy;
 pub use home::Home;

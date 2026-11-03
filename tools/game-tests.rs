@@ -630,7 +630,9 @@ mod rng_tests {
 }
 
 mod doom_tests {
-    use crate::game::doom::{DoomGame, Frame, HEIGHT, MAP_SIZE, State, WIDTH};
+    use crate::game::doom::{
+        Difficulty, DoomGame, Frame, HEIGHT, Kind, MAP_SIZE, MAPS, MAX_ENEMIES, State, WIDTH,
+    };
 
     fn picture(game: &DoomGame) -> String {
         let mut frame = Frame::new();
@@ -646,39 +648,115 @@ mod doom_tests {
     }
 
     #[test]
-    fn the_map_is_walled_in_and_square() {
-        for row in 0..MAP_SIZE {
-            let line = DoomGame::map_row(row);
-            assert_eq!(line[0], b'#');
-            assert_eq!(line[MAP_SIZE - 1], b'#');
+    fn every_map_is_walled_in_and_reachable() {
+        for level in 0..MAPS {
+            for row in 0..MAP_SIZE {
+                let line = DoomGame::map_row(level, row);
+                assert_eq!(line[0], b'#');
+                assert_eq!(line[MAP_SIZE - 1], b'#');
+            }
+            assert!(DoomGame::map_row(level, 0).iter().all(|&c| c == b'#'));
+            assert!(DoomGame::map_row(level, MAP_SIZE - 1).iter().all(|&c| c == b'#'));
+            assert_eq!(DoomGame::map_row(level, 1)[1], b'.', "the start is open");
+
+            let mut seen = [[false; MAP_SIZE]; MAP_SIZE];
+            let mut queue = vec![(1usize, 1usize)];
+            seen[1][1] = true;
+            while let Some((x, y)) = queue.pop() {
+                for (nx, ny) in [(x + 1, y), (x - 1, y), (x, y + 1), (x, y - 1)] {
+                    if DoomGame::map_row(level, ny)[nx] != b'#' && !seen[ny][nx] {
+                        seen[ny][nx] = true;
+                        queue.push((nx, ny));
+                    }
+                }
+            }
+            let mut monsters = 0;
+            for y in 0..MAP_SIZE {
+                for x in 0..MAP_SIZE {
+                    let cell = DoomGame::map_row(level, y)[x];
+                    if matches!(cell, b'E' | b'B' | b'S') {
+                        monsters += 1;
+                        assert!(seen[y][x], "level {level}: monster at {x},{y} is walled off");
+                    }
+                }
+            }
+            assert!(monsters <= MAX_ENEMIES, "level {level} has {monsters} monsters");
+            assert!(monsters >= 4, "level {level} is too empty");
         }
-        assert!(DoomGame::map_row(0).iter().all(|&c| c == b'#'));
-        assert!(DoomGame::map_row(MAP_SIZE - 1).iter().all(|&c| c == b'#'));
     }
 
     #[test]
-    fn every_demon_can_be_reached_from_the_start() {
-        let mut seen = [[false; MAP_SIZE]; MAP_SIZE];
-        let mut queue = vec![(1usize, 1usize)];
-        seen[1][1] = true;
-        while let Some((x, y)) = queue.pop() {
-            for (nx, ny) in [(x + 1, y), (x - 1, y), (x, y + 1), (x, y - 1)] {
-                if DoomGame::map_row(ny)[nx] != b'#' && !seen[ny][nx] {
-                    seen[ny][nx] = true;
-                    queue.push((nx, ny));
+    fn hard_uses_every_monster_on_the_first_map() {
+        let mut game = DoomGame::new(1);
+        game.set_difficulty(Difficulty::Hard);
+        let on_map = (0..MAP_SIZE)
+            .flat_map(|y| DoomGame::map_row(0, y).iter())
+            .filter(|&&c| matches!(c, b'E' | b'B' | b'S'))
+            .count();
+        assert_eq!(game.total() as usize, on_map);
+    }
+
+    #[test]
+    fn clearing_a_level_goes_on_to_a_harder_one() {
+        let mut game = DoomGame::new(1);
+        game.set_difficulty(Difficulty::Hard);
+        game.play();
+        let first = game.total();
+        game.place(128 + 256, 128 + 13 * 256, 64);
+        for index in 0..first as usize {
+            game.put_enemy(index, 1, 14);
+        }
+        // line the demons up one at a time in front of the gun
+        for index in 0..first as usize {
+            game.put_enemy(index, 1, 14);
+            game.place(128 + 256, 128 + 13 * 256, 64);
+            while game.kills() as usize == index {
+                if game.ammo() == 0 {
+                    game.fire();
+                    for _ in 0..3 {
+                        game.tick();
+                    }
+                    for other in index..first as usize {
+                        game.put_enemy(other, 1, 14);
+                    }
+                    game.place(128 + 256, 128 + 13 * 256, 64);
                 }
+                game.fire();
             }
         }
-        let mut demons = 0;
-        for y in 0..MAP_SIZE {
-            for x in 0..MAP_SIZE {
-                if DoomGame::map_row(y)[x] == b'E' {
-                    demons += 1;
-                    assert!(seen[y][x], "demon at {x},{y} is walled off");
-                }
-            }
+        assert_eq!(game.state(), State::Cleared);
+        let score = game.score();
+        assert!(score > 0);
+        game.next_level();
+        assert_eq!(game.state(), State::Playing);
+        assert_eq!(game.level(), 2);
+        assert!(game.health() > 0);
+        assert_eq!(game.score(), score, "the score carries over");
+        assert_eq!(game.position().0, 128 + 256, "back at the start");
+        assert!(
+            (0..game.total() as usize).any(|i| game.enemy_kind(i) == Kind::Brute),
+            "the second level brings brutes"
+        );
+    }
+
+    #[test]
+    fn retiring_after_a_clear_ends_the_run_with_its_score() {
+        let mut game = DoomGame::new(1);
+        game.play();
+        game.retire();
+        assert_eq!(game.state(), State::Playing, "only a cleared level can be left");
+    }
+
+    #[test]
+    fn the_levels_cycle_through_the_maps() {
+        let mut game = DoomGame::new(1);
+        game.play();
+        for _ in 0..MAPS {
+            game.set_cleared();
+            game.next_level();
         }
-        assert_eq!(DoomGame::new(1).total(), demons);
+        assert_eq!(game.level() as usize, MAPS + 1);
+        assert!(game.total() > 0);
     }
 
     #[test]
@@ -770,7 +848,7 @@ mod doom_tests {
                 assert!(game.fire());
             }
         }
-        assert_eq!(game.state(), State::Won);
+        assert_eq!(game.state(), State::Cleared);
     }
 
     #[test]
@@ -807,6 +885,21 @@ mod doom_tests {
             .map(|i| game.enemy_cell(i))
             .collect::<Vec<_>>();
         assert_ne!(before, after, "they are coming");
+    }
+
+    #[test]
+    fn harder_levels_have_more_demons() {
+        use crate::game::doom::Difficulty;
+        let mut game = DoomGame::new(1);
+        let mut counts = Vec::new();
+        for level in [Difficulty::Easy, Difficulty::Normal, Difficulty::Hard] {
+            game.set_difficulty(level);
+            counts.push(game.total());
+        }
+        assert!(counts[0] < counts[1] && counts[1] < counts[2], "{counts:?}");
+        game.play();
+        game.set_difficulty(Difficulty::Easy);
+        assert_eq!(game.difficulty(), Difficulty::Hard, "locked once playing");
     }
 
     #[test]

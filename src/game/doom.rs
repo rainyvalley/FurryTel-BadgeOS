@@ -7,27 +7,68 @@ use super::rng::Rng;
 pub const WIDTH: usize = 128;
 pub const HEIGHT: usize = 32;
 pub const MAP_SIZE: usize = 16;
-pub const MAX_ENEMIES: usize = 8;
+pub const MAX_ENEMIES: usize = 10;
 
-/// Where the player starts, as a cell.
+/// Where the player starts on every level, as a cell.
 const START: (i32, i32) = (1, 1);
-const MAP: [&[u8; MAP_SIZE]; MAP_SIZE] = [
-    b"################",
-    b"#..............#",
-    b"#.####..####...#",
-    b"#.#......E...#.#",
-    b"#.#..####....#.#",
-    b"#....#..#....E.#",
-    b"###..#..#..#####",
-    b"#......E.......#",
-    b"#..##......##..#",
-    b"#..#...E....#..#",
-    b"#..#..####..#..#",
-    b"#.....#..#.....#",
-    b"#.##..#..#..##.#",
-    b"#.E.........E..#",
-    b"#..............#",
-    b"################",
+/// The levels' maps, which repeat once they run out.  `#` is wall, `E` a demon, `B` a brute and
+/// `S` a skull.
+pub const MAPS: usize = 3;
+const MAP: [[&[u8; MAP_SIZE]; MAP_SIZE]; MAPS] = [
+    [
+        b"################",
+        b"#..............#",
+        b"#.####..####...#",
+        b"#.#......E...#.#",
+        b"#.#..####....#.#",
+        b"#....#..#....E.#",
+        b"###..#..#..#####",
+        b"#......E.......#",
+        b"#..##......##..#",
+        b"#..#...E....#..#",
+        b"#..#..####..#..#",
+        b"#.....#..#.....#",
+        b"#.##..#..#..##.#",
+        b"#.E.........E..#",
+        b"#..............#",
+        b"################",
+    ],
+    [
+        b"################",
+        b"#..............#",
+        b"#.##.####.####.#",
+        b"#.#....#.....#.#",
+        b"#.#.##.#.###.#.#",
+        b"#...#..#...#...#",
+        b"###.#.####.#.###",
+        b"#.......B......#",
+        b"#.####.###.###.#",
+        b"#.#E...#.....#.#",
+        b"#.#.####.###.#.#",
+        b"#...#..E...#...#",
+        b"#.#.#.####.#.#.#",
+        b"#.#E..#..B...#.#",
+        b"#..............#",
+        b"################",
+    ],
+    [
+        b"################",
+        b"#..............#",
+        b"#.###.####.###.#",
+        b"#.#S........S#.#",
+        b"#.#.##.##.##.#.#",
+        b"#...#..B...#...#",
+        b"#.###.####.###.#",
+        b"#..............#",
+        b"##.##.#..#.##.##",
+        b"#....E....E....#",
+        b"#.##.#.##.#.##.#",
+        b"#.#S.#....#.S#.#",
+        b"#.#..######..#.#",
+        b"#..B..........E#",
+        b"#..............#",
+        b"################",
+    ],
 ];
 
 /// sin of 0..=64 quarter-turn steps, times 256
@@ -50,8 +91,168 @@ const SCALE: i64 = 36;
 /// Rounds in a magazine, and ticks a reload takes.
 pub const MAGAZINE: u8 = 6;
 const RELOAD_TICKS: u8 = 3;
-const ENEMY_HP: i8 = 2;
+
+/// How hard the demons are, picked on the title screen.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub enum Difficulty {
+    Easy,
+    Normal,
+    Hard,
+}
+
+impl Difficulty {
+    pub fn name(self) -> &'static str {
+        match self {
+            Difficulty::Easy => "EASY",
+            Difficulty::Normal => "NORMAL",
+            Difficulty::Hard => "HARD",
+        }
+    }
+
+    pub fn harder(self) -> Self {
+        match self {
+            Difficulty::Easy => Difficulty::Normal,
+            _ => Difficulty::Hard,
+        }
+    }
+
+    pub fn easier(self) -> Self {
+        match self {
+            Difficulty::Hard => Difficulty::Normal,
+            _ => Difficulty::Easy,
+        }
+    }
+
+    /// Whether the `n`th monster on the map is there at all.
+    fn keeps(self, n: usize) -> bool {
+        match self {
+            Difficulty::Easy => n % 2 == 0,
+            Difficulty::Normal => n % 4 != 3,
+            Difficulty::Hard => true,
+        }
+    }
+
+    /// Ticks between a monster's steps, before its own speed is added.
+    fn pace(self) -> u32 {
+        match self {
+            Difficulty::Easy => 4,
+            Difficulty::Normal => 3,
+            Difficulty::Hard => 2,
+        }
+    }
+
+    /// Health lost to a bite, before the monster's own strength is added.
+    fn bite(self) -> i16 {
+        match self {
+            Difficulty::Easy => 4,
+            Difficulty::Normal => 8,
+            Difficulty::Hard => 10,
+        }
+    }
+
+    /// Extra hits every monster takes.
+    fn toughness(self) -> i8 {
+        match self {
+            Difficulty::Easy => -1,
+            _ => 0,
+        }
+    }
+
+    /// What the score is multiplied by.
+    fn multiplier(self) -> u32 {
+        match self {
+            Difficulty::Easy => 1,
+            Difficulty::Normal => 2,
+            Difficulty::Hard => 3,
+        }
+    }
+}
+
 const PLAYER_HP: i16 = 100;
+/// Health given back for finishing a level.
+const LEVEL_HEAL: i16 = 30;
+
+/// The kinds of monster.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub enum Kind {
+    /// the usual one
+    Demon,
+    /// slow, tough and hits hard
+    Brute,
+    /// fast and fragile, with a weak bite
+    Skull,
+}
+
+impl Kind {
+    fn from_map(cell: u8) -> Option<Kind> {
+        match cell {
+            b'E' => Some(Kind::Demon),
+            b'B' => Some(Kind::Brute),
+            b'S' => Some(Kind::Skull),
+            _ => None,
+        }
+    }
+
+    fn hp(self) -> i8 {
+        match self {
+            Kind::Demon => 2,
+            Kind::Brute => 4,
+            Kind::Skull => 1,
+        }
+    }
+
+    /// Added to the difficulty's ticks between steps (never below one).
+    fn slowness(self) -> i32 {
+        match self {
+            Kind::Demon => 0,
+            Kind::Brute => 2,
+            Kind::Skull => -2,
+        }
+    }
+
+    fn strength(self) -> i16 {
+        match self {
+            Kind::Demon => 0,
+            Kind::Brute => 8,
+            Kind::Skull => -3,
+        }
+    }
+
+    /// Points for a kill.
+    fn value(self) -> u32 {
+        match self {
+            Kind::Demon => 100,
+            Kind::Brute => 250,
+            Kind::Skull => 150,
+        }
+    }
+
+    /// How wide a shot can miss the middle and still hit, in 1/256ths of a cell.
+    fn reach(self) -> i32 {
+        match self {
+            Kind::Demon => 90,
+            Kind::Brute => 120,
+            Kind::Skull => 70,
+        }
+    }
+
+    /// Sprite size against a demon's, in eighths.
+    fn size(self) -> i32 {
+        match self {
+            Kind::Demon => 8,
+            Kind::Brute => 11,
+            Kind::Skull => 6,
+        }
+    }
+
+    fn picture(self) -> (&'static [u8; 8], &'static [u8; 8]) {
+        match self {
+            Kind::Demon => (&DEMON_MASK, &DEMON_INK),
+            Kind::Brute => (&BRUTE_MASK, &BRUTE_INK),
+            Kind::Skull => (&SKULL_MASK, &SKULL_INK),
+        }
+    }
+}
 
 fn sin(angle: u8) -> i32 {
     let a = angle as usize;
@@ -73,11 +274,15 @@ pub enum State {
     Playing,
     Paused,
     Dead,
-    Won,
+    /// the level is done; the player can go on or retire with the score
+    Cleared,
+    /// the player stopped after clearing a level
+    Retired,
 }
 
 #[derive(Clone, Copy)]
 struct Enemy {
+    kind: Kind,
     /// the cell it stands in
     x: i32,
     y: i32,
@@ -153,6 +358,12 @@ fn shade_on(level: u8, x: i32, y: i32) -> bool {
 /// A demon: which pixels exist, and which of those are ink.  Bit 7 is the left edge.
 const DEMON_MASK: [u8; 8] = [0x3C, 0x7E, 0x7E, 0xFF, 0xFF, 0x7E, 0x66, 0xE7];
 const DEMON_INK: [u8; 8] = [0x3C, 0x5A, 0x7E, 0xFF, 0xDB, 0x7E, 0x66, 0xE7];
+/// A brute: horned and broad.
+const BRUTE_MASK: [u8; 8] = [0x81, 0xC3, 0xFF, 0xFF, 0xFF, 0xFF, 0x7E, 0x66];
+const BRUTE_INK: [u8; 8] = [0x81, 0xC3, 0xDB, 0xFF, 0xAA, 0xFF, 0x7E, 0x66];
+/// A skull, with hollow eyes and a jaw.
+const SKULL_MASK: [u8; 8] = [0x3C, 0x7E, 0xFF, 0xFF, 0xFF, 0x7E, 0x5A, 0x00];
+const SKULL_INK: [u8; 8] = [0x3C, 0x7E, 0xDB, 0xDB, 0xFF, 0x7E, 0x5A, 0x00];
 
 struct Hit {
     /// perpendicular distance, in 1/65536ths of a cell
@@ -177,13 +388,10 @@ pub struct DoomGame {
     ammo: u8,
     /// ticks left before the magazine is full again; 0 when not reloading
     reload: u8,
-}
-
-fn is_wall(x: i32, y: i32) -> bool {
-    if !(0..MAP_SIZE as i32).contains(&x) || !(0..MAP_SIZE as i32).contains(&y) {
-        return true;
-    }
-    MAP[y as usize][x as usize] == b'#'
+    difficulty: Difficulty,
+    /// 1 for the first level
+    level: u8,
+    score: u32,
 }
 
 impl DoomGame {
@@ -195,6 +403,7 @@ impl DoomGame {
             angle: 0,
             health: PLAYER_HP,
             enemies: [Enemy {
+                kind: Kind::Demon,
                 x: 0,
                 y: 0,
                 hp: 0,
@@ -208,16 +417,28 @@ impl DoomGame {
             ticks: 0,
             ammo: MAGAZINE,
             reload: 0,
+            difficulty: Difficulty::Normal,
+            level: 1,
+            score: 0,
         };
         this.reset();
         this
     }
 
+    /// Start over from the first level, on the title screen.
     pub fn reset(&mut self) {
+        self.level = 1;
+        self.score = 0;
+        self.health = PLAYER_HP;
+        self.load_level();
+        self.state = State::Ready;
+    }
+
+    /// Set up the current level's map and monsters.
+    fn load_level(&mut self) {
         self.x = START.0 * 256 + 128;
         self.y = START.1 * 256 + 128;
         self.angle = 0;
-        self.health = PLAYER_HP;
         self.kills = 0;
         self.flash = 0;
         self.hurt = 0;
@@ -225,20 +446,61 @@ impl DoomGame {
         self.ammo = MAGAZINE;
         self.reload = 0;
         self.count = 0;
-        for (row, line) in MAP.iter().enumerate() {
+        // each time through the maps, everything gets a hit tougher
+        let laps = ((self.level - 1) as usize / MAPS) as i8;
+        let mut seen = 0;
+        for (row, line) in self.map().iter().enumerate() {
             for (column, &cell) in line.iter().enumerate() {
-                if cell == b'E' && self.count < MAX_ENEMIES {
-                    self.enemies[self.count] = Enemy {
-                        x: column as i32,
-                        y: row as i32,
-                        hp: ENEMY_HP,
-                        cooldown: 0,
-                    };
-                    self.count += 1;
+                let Some(kind) = Kind::from_map(cell) else {
+                    continue;
+                };
+                seen += 1;
+                if !self.difficulty.keeps(seen - 1) || self.count >= MAX_ENEMIES {
+                    continue;
                 }
+                self.enemies[self.count] = Enemy {
+                    kind,
+                    x: column as i32,
+                    y: row as i32,
+                    hp: (kind.hp() + self.difficulty.toughness() + laps).max(1),
+                    cooldown: 0,
+                };
+                self.count += 1;
             }
         }
-        self.state = State::Ready;
+    }
+
+    fn map(&self) -> &'static [&'static [u8; MAP_SIZE]; MAP_SIZE] {
+        &MAP[(self.level as usize - 1) % MAPS]
+    }
+
+    fn wall(&self, x: i32, y: i32) -> bool {
+        if !(0..MAP_SIZE as i32).contains(&x) || !(0..MAP_SIZE as i32).contains(&y) {
+            return true;
+        }
+        self.map()[y as usize][x as usize] == b'#'
+    }
+
+    /// Go on to the next, harder level after clearing one.
+    pub fn next_level(&mut self) {
+        if self.state != State::Cleared {
+            return;
+        }
+        self.level = self.level.saturating_add(1);
+        self.health = (self.health + LEVEL_HEAL).min(PLAYER_HP);
+        self.load_level();
+        self.state = State::Playing;
+    }
+
+    /// Stop after a cleared level, keeping the score.
+    pub fn retire(&mut self) {
+        if self.state == State::Cleared {
+            self.state = State::Retired;
+        }
+    }
+
+    pub fn level(&self) -> u8 {
+        self.level
     }
 
     pub fn state(&self) -> State {
@@ -253,14 +515,21 @@ impl DoomGame {
         self.kills
     }
 
-    /// 100 a demon, and for clearing the level, a bonus for the health left.
+    /// Points for kills, and a bonus for each level cleared, all scaled by the difficulty.
     pub fn score(&self) -> u32 {
-        let bonus = if self.state == State::Won {
-            500 + self.health.max(0) as u32 * 5
-        } else {
-            0
-        };
-        u32::from(self.kills) * 100 + bonus
+        self.score
+    }
+
+    pub fn difficulty(&self) -> Difficulty {
+        self.difficulty
+    }
+
+    /// Change the difficulty from the title screen; the level is rebuilt to match.
+    pub fn set_difficulty(&mut self, difficulty: Difficulty) {
+        if self.state == State::Ready {
+            self.difficulty = difficulty;
+            self.reset();
+        }
     }
 
     pub fn ammo(&self) -> u8 {
@@ -329,7 +598,7 @@ impl DoomGame {
             (-MARGIN, MARGIN),
             (MARGIN, MARGIN),
         ] {
-            if is_wall((x + dx) >> 8, (y + dy) >> 8) {
+            if self.wall((x + dx) >> 8, (y + dy) >> 8) {
                 return false;
             }
         }
@@ -360,7 +629,7 @@ impl DoomGame {
             let (depth, lateral) = self.relative(enemy.centre());
             if depth > 0
                 && i64::from(depth) < wall
-                && lateral.abs() < 90
+                && lateral.abs() < enemy.kind.reach()
                 && target.is_none_or(|(_, best)| depth < best)
             {
                 target = Some((index, depth));
@@ -372,8 +641,11 @@ impl DoomGame {
         self.enemies[index].hp -= 1;
         if !self.enemies[index].alive() {
             self.kills += 1;
+            self.score += self.enemies[index].kind.value() * self.difficulty.multiplier();
             if usize::from(self.kills) == self.count {
-                self.state = State::Won;
+                let bonus = 200 + u32::from(self.level) * 100 + self.health.max(0) as u32 * 3;
+                self.score += bonus * self.difficulty.multiplier();
+                self.state = State::Cleared;
             }
         }
         true
@@ -412,11 +684,17 @@ impl DoomGame {
             self.enemies[index].cooldown = enemy.cooldown.saturating_sub(1);
             if close <= 1 {
                 if enemy.cooldown == 0 && self.rng.below(3) != 0 {
-                    self.health -= 8;
+                    self.health -= (self.difficulty.bite()
+                        + enemy.kind.strength()
+                        + i16::from(self.level / 4))
+                    .max(1);
                     self.hurt = 1;
                     self.enemies[index].cooldown = 3;
                 }
-            } else if (self.ticks + index as u32) % 2 == 0 {
+            } else if (self.ticks + index as u32)
+                % (self.difficulty.pace() as i32 + enemy.kind.slowness()).max(1) as u32
+                == 0
+            {
                 self.advance(index, &map);
             }
         }
@@ -439,7 +717,7 @@ impl DoomGame {
             head += 1;
             for (dx, dy) in [(1, 0), (-1, 0), (0, 1), (0, -1)] {
                 let (nx, ny) = (i32::from(x) + dx, i32::from(y) + dy);
-                if is_wall(nx, ny) || map[ny as usize][nx as usize] != 255 {
+                if self.wall(nx, ny) || map[ny as usize][nx as usize] != 255 {
                     continue;
                 }
                 map[ny as usize][nx as usize] = map[y as usize][x as usize] + 1;
@@ -457,7 +735,7 @@ impl DoomGame {
         let mut target = None;
         for (dx, dy) in [(1, 0), (-1, 0), (0, 1), (0, -1)] {
             let (x, y) = (me.x + dx, me.y + dy);
-            if is_wall(x, y) || map[y as usize][x as usize] >= best {
+            if self.wall(x, y) || map[y as usize][x as usize] >= best {
                 continue;
             }
             let taken = self.enemies[..self.count]
@@ -517,7 +795,7 @@ impl DoomGame {
                 cell_y += step_y;
                 side = false;
             }
-            if is_wall(cell_x, cell_y) {
+            if self.wall(cell_x, cell_y) {
                 break;
             }
         }
@@ -611,7 +889,8 @@ impl DoomGame {
         }
         let ahead = i64::from(ahead);
         let centre = 64 + (64 * i64::from(right) * 256 / (ahead * i64::from(PLANE))) as i32;
-        let size = (SCALE * 256 / ahead) as i32;
+        let size = (SCALE * 256 / ahead) as i32 * enemy.kind.size() / 8;
+        let (mask, ink) = enemy.kind.picture();
         let (left, top) = (centre - size / 2, HEIGHT as i32 / 2 - size / 2);
         for column in left.max(0)..(left + size).min(WIDTH as i32) {
             if depth[column as usize] <= ahead << 8 {
@@ -620,8 +899,8 @@ impl DoomGame {
             let u = ((column - left) * 8 / size) as usize;
             for row in top.max(0)..(top + size).min(HEIGHT as i32) {
                 let v = ((row - top) * 8 / size) as usize;
-                if DEMON_MASK[v] & (0x80 >> u) != 0 {
-                    frame.put(column, row, DEMON_INK[v] & (0x80 >> u) != 0);
+                if mask[v] & (0x80 >> u) != 0 {
+                    frame.put(column, row, ink[v] & (0x80 >> u) != 0);
                 }
             }
         }
@@ -656,7 +935,17 @@ impl DoomGame {
     }
 
     #[cfg(test)]
-    pub fn map_row(row: usize) -> &'static [u8; MAP_SIZE] {
-        MAP[row]
+    pub fn map_row(level: usize, row: usize) -> &'static [u8; MAP_SIZE] {
+        MAP[level][row]
+    }
+
+    #[cfg(test)]
+    pub fn enemy_kind(&self, index: usize) -> Kind {
+        self.enemies[index].kind
+    }
+
+    #[cfg(test)]
+    pub fn set_cleared(&mut self) {
+        self.state = State::Cleared;
     }
 }

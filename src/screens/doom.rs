@@ -93,8 +93,22 @@ impl Doom {
         .unwrap();
 
         let mut kills = heapless::String::<16>::new();
-        write!(&mut kills, "{}/{}", self.game.kills(), self.game.total()).unwrap();
-        self.banner_at(canvas, 108, 0, 20, 7);
+        write!(
+            &mut kills,
+            "L{} {}/{}",
+            self.game.level(),
+            self.game.kills(),
+            self.game.total()
+        )
+        .unwrap();
+        let width = kills.len() as u32 * 4 + 1;
+        self.banner_at(
+            canvas,
+            hardware::DISPLAY_WIDTH as i32 - width as i32,
+            0,
+            width,
+            7,
+        );
         Text::with_text_style(
             kills.as_str(),
             Point::new(hardware::DISPLAY_WIDTH as i32 - 1, 1),
@@ -182,7 +196,7 @@ impl Doom {
 
 impl Screen for Doom {
     fn final_score(&self) -> Option<u32> {
-        matches!(self.game.state(), State::Dead | State::Won).then(|| self.game.score())
+        matches!(self.game.state(), State::Dead | State::Retired).then(|| self.game.score())
     }
 
     fn enter(&mut self) {
@@ -195,13 +209,15 @@ impl Screen for Doom {
     fn draw(&self, canvas: &mut Canvas) {
         match self.game.state() {
             State::Ready => {
+                let mut level = heapless::String::<32>::new();
+                write!(&mut level, "▲▼ level {}", self.game.difficulty().name()).unwrap();
                 self.big_text_at(canvas, "DOOM", 2, 8);
                 for (n, line) in [
                     "▲▼ walk  ◀▶ turn",
                     "● fire / reload",
                     "▲▼▲▼ pause",
-                    "● start",
-                    self.exit_hint("◀◀◀ exit"),
+                    level.as_str(),
+                    self.exit_hint("● start ◀◀◀ exit"),
                 ]
                 .into_iter()
                 .enumerate()
@@ -227,17 +243,39 @@ impl Screen for Doom {
                 self.text(canvas, "PAUSED", 8);
                 self.small_text(canvas, self.exit_hint("● resume ◀◀◀ quit"), 20);
             }
-            State::Dead => {
+            State::Dead | State::Retired => {
                 self.draw_view(canvas);
                 self.banner(canvas, 7, 25);
-                self.text(canvas, "YOU DIED", 8);
-                self.small_text(canvas, self.exit_hint("● retry ◀◀◀ exit"), 20);
+                self.text(
+                    canvas,
+                    if self.game.state() == State::Dead {
+                        "YOU DIED"
+                    } else {
+                        "RETIRED"
+                    },
+                    8,
+                );
+                let mut line = heapless::String::<32>::new();
+                write!(
+                    &mut line,
+                    "LEVEL {}  SCORE {}",
+                    self.game.level(),
+                    self.game.score()
+                )
+                .unwrap();
+                self.small_text(canvas, &line, 19);
+                self.small_text(canvas, self.exit_hint("● retry ◀◀◀ exit"), 26);
             }
-            State::Won => {
+            State::Cleared => {
                 self.draw_view(canvas);
                 self.banner(canvas, 7, 25);
-                self.text(canvas, "CLEARED!", 8);
-                self.small_text(canvas, self.exit_hint("● again ◀◀◀ exit"), 20);
+                let mut line = heapless::String::<32>::new();
+                write!(&mut line, "LEVEL {} CLEAR", self.game.level()).unwrap();
+                self.text(canvas, &line, 8);
+                let mut line = heapless::String::<32>::new();
+                write!(&mut line, "SCORE {}", self.game.score()).unwrap();
+                self.small_text(canvas, &line, 19);
+                self.small_text(canvas, self.exit_hint("● next level ◀◀◀ stop"), 26);
             }
         }
     }
@@ -269,12 +307,19 @@ impl Screen for Doom {
                         self.game.fire();
                     }
                 }
-                if self.game.state() == State::Won {
-                    backlight::set(backlight::DEFAULT);
-                }
                 Response::Redraw
             }
-            State::Ready | State::Paused => match button {
+            State::Ready => match button {
+                Button::Up => {
+                    self.exit_armed = 0;
+                    self.game.set_difficulty(self.game.difficulty().harder());
+                    Response::Redraw
+                }
+                Button::Down => {
+                    self.exit_armed = 0;
+                    self.game.set_difficulty(self.game.difficulty().easier());
+                    Response::Redraw
+                }
                 Button::Center => {
                     self.exit_armed = 0;
                     self.game.start();
@@ -286,7 +331,39 @@ impl Screen for Doom {
                     Response::Ignored
                 }
             },
-            State::Dead | State::Won => match button {
+            State::Paused => match button {
+                Button::Center => {
+                    self.exit_armed = 0;
+                    self.game.start();
+                    Response::Redraw
+                }
+                Button::Left => self.exit_response(),
+                _ => {
+                    self.exit_armed = 0;
+                    Response::Ignored
+                }
+            },
+            State::Cleared => match button {
+                Button::Center => {
+                    self.exit_armed = 0;
+                    self.game.next_level();
+                    Response::Redraw
+                }
+                // three Lefts stop here, keeping the score
+                Button::Left => {
+                    self.exit_armed += 1;
+                    if self.exit_armed >= 3 {
+                        self.exit_armed = 0;
+                        self.game.retire();
+                    }
+                    Response::Redraw
+                }
+                _ => {
+                    self.exit_armed = 0;
+                    Response::Ignored
+                }
+            },
+            State::Dead | State::Retired => match button {
                 Button::Center => {
                     self.exit_armed = 0;
                     self.game.reset();

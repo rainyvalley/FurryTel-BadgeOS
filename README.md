@@ -16,7 +16,7 @@ note, and includes five games with saved high scores. Content is set in `badge.y
   ![The GitHub link card](docs/link-card.png)
 
 - **Games**: Snake, Flappy, Frogger, a knock-off Tetris (with standard SRS rotation), and Doom (a
-  tiny raycaster). The D-pad plays; three Lefts leave a game (in Tetris,
+  raycaster with three difficulties, three kinds of monster, and levels that get harder until you die). The D-pad plays; three Lefts leave a game (in Tetris,
   three presses of the button on the player's left). Tetris is drawn sideways, with the badge
   turned clockwise:
 
@@ -106,7 +106,7 @@ before flashing each badge.
 | Note | D-pad moves around the keyboard, `OK` saves, `esc` cancels |
 | Links | Up/Down or Left/Right turn pages, Center goes back |
 | Games | D-pad plays, Center starts/pauses/retries, three Lefts quit (Flappy flaps on Center) |
-| Doom | Up/Down walk, Left/Right turn, Center fires; Up Down Up Down pauses |
+| Doom | Title: Up/Down pick the difficulty, Center starts. Up/Down walk, Left/Right turn, Center fires (and reloads when empty); Up Down Up Down pauses. Between levels Center continues and three Lefts stop with the score |
 | Scores | Up/Down flip between games, Left goes back |
 | Tetris | turn the badge clockwise — the buttons turn with it: up=right, down=left, left=pause, right=drops to the bottom, Center rotates |
 | Colors | Left/Right pick a field, Up/Down change it, Center saves and finishes |

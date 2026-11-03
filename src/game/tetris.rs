@@ -28,6 +28,9 @@ pub enum State {
 pub struct Piece {
     /// the rotated shape
     pub mask: u16,
+    kind: u8,
+    /// quarter turns clockwise from the spawn orientation, 0 to 3
+    rot: u8,
     pub x: i8,
     pub y: i8,
 }
@@ -52,16 +55,48 @@ fn bit(row: u32, column: u32) -> u16 {
     1 << (row * 4 + column)
 }
 
-fn rotate(mask: u16) -> u16 {
+const I: u8 = 0;
+const O: u8 = 1;
+
+/// Rotate a quarter turn clockwise about the middle of the piece's own bounding box, as the
+/// Super Rotation System does: 4x4 for the I, 3x3 for the rest.  (The O never moves.)
+fn rotate(kind: u8, mask: u16) -> u16 {
+    let size = match kind {
+        O => return mask,
+        I => 4,
+        _ => 3,
+    };
     let mut out = 0;
-    for row in 0..4 {
-        for column in 0..4 {
+    for row in 0..size {
+        for column in 0..size {
             if mask & bit(row, column) != 0 {
-                out |= bit(column, 3 - row);
+                out |= bit(column, size - 1 - row);
             }
         }
     }
     out
+}
+
+/// SRS wall kicks for a clockwise turn out of orientation `from`, as (dx, dy) with y down.
+/// Tried in order; the first that fits wins.
+fn kicks(kind: u8, from: u8) -> &'static [(i8, i8)] {
+    const JLSTZ: [[(i8, i8); 5]; 4] = [
+        [(0, 0), (-1, 0), (-1, -1), (0, 2), (-1, 2)],
+        [(0, 0), (1, 0), (1, 1), (0, -2), (1, -2)],
+        [(0, 0), (1, 0), (1, -1), (0, 2), (1, 2)],
+        [(0, 0), (-1, 0), (-1, 1), (0, -2), (-1, -2)],
+    ];
+    const I_KICKS: [[(i8, i8); 5]; 4] = [
+        [(0, 0), (-2, 0), (1, 0), (-2, 1), (1, -2)],
+        [(0, 0), (-1, 0), (2, 0), (-1, -2), (2, 1)],
+        [(0, 0), (2, 0), (-1, 0), (2, -1), (-1, 2)],
+        [(0, 0), (1, 0), (-2, 0), (1, 2), (-2, -1)],
+    ];
+    match kind {
+        O => &[(0, 0)],
+        I => &I_KICKS[from as usize % 4],
+        _ => &JLSTZ[from as usize % 4],
+    }
 }
 
 impl TetrisGame {
@@ -71,6 +106,8 @@ impl TetrisGame {
             board: [0; ROWS as usize],
             piece: Piece {
                 mask: PIECES[0],
+                kind: 0,
+                rot: 0,
                 x: 2,
                 y: 0,
             },
@@ -140,12 +177,14 @@ impl TetrisGame {
         if self.state != State::Playing {
             return false;
         }
-        let rotated = rotate(self.piece.mask);
-        // a simple wall kick: try the same place, then a step either way
-        for dx in [0, -1, 1, -2, 2] {
-            if !self.collides(rotated, self.piece.x + dx, self.piece.y) {
+        let rotated = rotate(self.piece.kind, self.piece.mask);
+        for &(dx, dy) in kicks(self.piece.kind, self.piece.rot) {
+            let (x, y) = (self.piece.x + dx, self.piece.y + dy);
+            if !self.collides(rotated, x, y) {
                 self.piece.mask = rotated;
-                self.piece.x += dx;
+                self.piece.rot = (self.piece.rot + 1) % 4;
+                self.piece.x = x;
+                self.piece.y = y;
                 return true;
             }
         }
@@ -262,6 +301,8 @@ impl TetrisGame {
         self.next = self.rng.below(7);
         self.piece = Piece {
             mask: PIECES[kind as usize],
+            kind,
+            rot: 0,
             x: 2,
             y: 0,
         };
@@ -281,14 +322,16 @@ impl TetrisGame {
     pub fn set_piece(&mut self, kind: u8, x: i8, y: i8) {
         self.piece = Piece {
             mask: PIECES[kind as usize],
+            kind,
+            rot: 0,
             x,
             y,
         };
     }
 
     #[cfg(test)]
-    pub fn rotate_mask(mask: u16) -> u16 {
-        rotate(mask)
+    pub fn rotate_mask(kind: u8, mask: u16) -> u16 {
+        rotate(kind, mask)
     }
 
     #[cfg(test)]

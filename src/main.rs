@@ -143,7 +143,7 @@ async fn main(spawner: Spawner) {
 
     let mut snake_game = screens::Snake::new(unique_id);
     let mut flappy = screens::Flappy::new(unique_id);
-    let mut crossy = screens::Crossy::new(unique_id);
+    let mut frogger = screens::Crossy::new(unique_id);
     let mut tetris = screens::Tetris::new(unique_id);
     let mut doom = screens::Doom::new(unique_id);
     let mut games = Menu::with_header(
@@ -151,7 +151,7 @@ async fn main(spawner: Spawner) {
         [
             Item::new("Snake", &mut snake_game),
             Item::new("Flappy", &mut flappy),
-            Item::new("Crossy", &mut crossy),
+            Item::new("Frogger", &mut frogger),
             Item::new("Tetris", &mut tetris),
             Item::new("Doom", &mut doom),
         ],

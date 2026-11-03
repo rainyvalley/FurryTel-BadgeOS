@@ -15,7 +15,7 @@ as big QR codes, pictures and a scratch note, and a few games for when you are w
 
   ![The GitHub link card](docs/link-card.png)
 
-- **Games**: Snake, Flappy, Crossy, a knock-off Tetris, and Doom (a tiny raycaster). The D-pad plays; three Lefts leave a game
+- **Games**: Snake, Flappy, Frogger, a knock-off Tetris, and Doom (a tiny raycaster). The D-pad plays; three Lefts leave a game
   so a stray press does not (in Tetris, three "lefts" at the new view leaves). Tetris is drawn
   sideways — turn the badge clockwise to play:
 

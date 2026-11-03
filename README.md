@@ -15,11 +15,14 @@ as big QR codes, pictures and a scratch note, and a few games for when you are w
 
   ![The GitHub link card](docs/link-card.png)
 
-- **Games**: Snake, Flappy, Frogger, a knock-off Tetris, and Doom (a tiny raycaster). The D-pad plays; three Lefts leave a game
-  so a stray press does not (in Tetris, three "lefts" at the new view leaves). Tetris is drawn
-  sideways — turn the badge clockwise to play:
+- **Games**: Snake, Flappy, Frogger, a knock-off Tetris (with standard SRS rotation), and Doom (a
+  tiny raycaster). The D-pad plays; three Lefts leave a game so a stray press does not (in Tetris,
+  three "lefts" at the new view leaves). Tetris is drawn sideways — turn the badge clockwise to play:
 
   ![The Tetris start screen and a game in progress, sideways](docs/tetris.png)
+- **Scores**: every game keeps its top three, saved in flash. A score that makes the list asks for
+  three initials (Up/Down change the letter, Left/Right move, Center confirms). The Scores screen
+  in the Games menu shows each game's list. The secret Snake is not scored.
 - **Colors**: presets and RGB sliders for the backlight, plus a separate color for the flash on
   every button press.
 - **LEDs**: the three little lights can blink randomly, hold a color, chase, or glow when you press

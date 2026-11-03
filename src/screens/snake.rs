@@ -27,7 +27,7 @@ const CENTER_TOP: TextStyle = TextStyleBuilder::new()
 /// The red the backlight turns when the snake dies.
 const DEATH_COLOR: [u8; 3] = [120, 0, 0];
 
-/// The secret game, unlocked by the Konami code.  Directions steer, Center pauses, and Left leaves
+/// Snake: directions steer, Center pauses, and Left leaves
 /// the game when it isn't running.
 pub struct Snake {
     game: SnakeGame,

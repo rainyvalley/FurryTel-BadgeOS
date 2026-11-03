@@ -17,7 +17,6 @@ mod ui;
 
 use crate::hardware::Buttons;
 use crate::sections::{Dashboard, Identity, StatusLine, Wordmark};
-use crate::ui::konami::Konami;
 use crate::ui::menu::{Item, Menu};
 use defmt::*;
 use embassy_executor::Spawner;
@@ -177,9 +176,7 @@ async fn main(spawner: Spawner) {
     ]);
 
     let mut home = screens::Home::new(dashboard, menu);
-    let mut root = Konami::new(&mut home, screens::Snake::new(unique_id));
-
-    ui::run(&mut display, &mut buttons, &mut root).await
+    ui::run(&mut display, &mut buttons, &mut home).await
 }
 
 #[embassy_executor::task]

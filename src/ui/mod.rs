@@ -3,14 +3,13 @@
 //! [`run`] drives.  Screens that animate ask for periodic [`Screen::tick`]s.
 
 pub mod glyphs;
-pub mod konami;
 pub mod menu;
 pub mod text_input;
 
 use core::fmt::Write as _;
 
 use embassy_futures::select::{Either, select};
-use embassy_time::{Duration, Timer};
+use embassy_time::{Duration, Instant, Timer};
 use embedded_graphics::{
     Drawable,
     draw_target::DrawTarget as _,
@@ -63,6 +62,12 @@ pub trait Screen {
         None
     }
 
+    /// Whether ticks keep their rhythm while buttons are pressed.  By default a press restarts the
+    /// wait for the next tick, which suits games that pause while you act.
+    fn fixed_ticks(&self) -> bool {
+        false
+    }
+
     /// Called every [`Screen::tick_interval`] while that's `Some`.
     fn tick(&mut self) -> Response {
         Response::Ignored
@@ -71,12 +76,6 @@ pub trait Screen {
     /// The score of a game that has just ended, for the scoreboard; `None` while it is still on.
     fn final_score(&self) -> Option<u32> {
         None
-    }
-
-    /// Whether the secret code is listened for right now.  Only the home screen wants it, so
-    /// games and menus keep every button press for themselves.
-    fn secret_ok(&self) -> bool {
-        false
     }
 }
 
@@ -87,11 +86,22 @@ pub async fn run(canvas: &mut Canvas, buttons: &mut Buttons, root: &mut dyn Scre
     root.enter();
     redraw(canvas, root);
 
+    let mut deadline: Option<Instant> = None;
     loop {
         let press = buttons.next_press();
         let event = match root.tick_interval() {
-            Some(interval) => select(press, Timer::after(interval)).await,
-            None => Either::First(press.await),
+            Some(interval) => {
+                let when = if root.fixed_ticks() {
+                    *deadline.get_or_insert(Instant::now() + interval)
+                } else {
+                    Instant::now() + interval
+                };
+                select(press, Timer::at(when)).await
+            }
+            None => {
+                deadline = None;
+                Either::First(press.await)
+            }
         };
         let response = match event {
             Either::First(button) => {
@@ -100,7 +110,10 @@ pub async fn run(canvas: &mut Canvas, buttons: &mut Buttons, root: &mut dyn Scre
                 crate::discrete::flash();
                 root.handle(button)
             }
-            Either::Second(()) => root.tick(),
+            Either::Second(()) => {
+                deadline = None;
+                root.tick()
+            }
         };
         match response {
             // the root has nowhere to exit to, so just show it again

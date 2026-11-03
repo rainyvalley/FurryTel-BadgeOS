@@ -23,13 +23,12 @@ note, and includes five games with saved high scores. Content is set in `badge.y
   ![The Tetris start screen and a game in progress, sideways](docs/tetris.png)
 - **Scores**: every game keeps its top three, saved in flash. A score that makes the list asks for
   three initials (Up/Down change the letter, Left/Right move, Center confirms). The Scores screen
-  in the Games menu shows each game's list. The secret Snake is not scored.
+  in the Games menu shows each game's list.
 - **Colors**: backlight presets and RGB sliders, plus a separate color for the flash on each button
   press.
 - **LEDs**: the three LEDs can blink randomly, hold a color, chase, or light on a button press.
 - **About / Status / Bootloader**: firmware info, battery and uptime, and a reboot into the USB
   bootloader.
-- **A secret**: enter ↑↑↓↓←→←→●● on the home screen to open Snake.
 
 ## Download, Customize, Flash
 

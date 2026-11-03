@@ -83,9 +83,14 @@ impl Doom {
         let mut health = heapless::String::<16>::new();
         write!(&mut health, "{}", self.game.health()).unwrap();
         self.banner_at(canvas, 0, 25, 14, 7);
-        Text::with_baseline(health.as_str(), Point::new(1, 26), ui::SMALL_TEXT, Baseline::Top)
-            .draw(canvas)
-            .unwrap();
+        Text::with_baseline(
+            health.as_str(),
+            Point::new(1, 26),
+            ui::SMALL_TEXT,
+            Baseline::Top,
+        )
+        .draw(canvas)
+        .unwrap();
 
         let mut kills = heapless::String::<16>::new();
         write!(&mut kills, "{}/{}", self.game.kills(), self.game.total()).unwrap();
@@ -101,6 +106,18 @@ impl Doom {
         )
         .draw(canvas)
         .unwrap();
+    }
+
+    fn draw_ammo_hint(&self, canvas: &mut Canvas) {
+        let message = if self.game.reloading() {
+            "RELOAD"
+        } else if self.game.ammo() == 0 {
+            "● RELOAD"
+        } else {
+            return;
+        };
+        self.banner_at(canvas, 40, 0, 48, 7);
+        self.small_text(canvas, message, 1);
     }
 
     fn banner_at(&self, canvas: &mut Canvas, x: i32, y: i32, width: u32, height: u32) {
@@ -139,6 +156,18 @@ impl Doom {
         .unwrap();
     }
 
+    fn big_text_at(&self, canvas: &mut Canvas, message: &str, x: i32, y: i32) {
+        Text::with_text_style(
+            message,
+            Point::new(x, y),
+            MonoTextStyle::new(&embedded_vintage_fonts::FONT_12X16, BinaryColor::On),
+            TextStyleBuilder::new().baseline(Baseline::Top).build(),
+        )
+        .draw(canvas)
+        .unwrap();
+    }
+
+    #[allow(dead_code)]
     fn big_text(&self, canvas: &mut Canvas, message: &str, y: i32) {
         Text::with_text_style(
             message,
@@ -166,31 +195,49 @@ impl Screen for Doom {
     fn draw(&self, canvas: &mut Canvas) {
         match self.game.state() {
             State::Ready => {
-                self.big_text(canvas, "DOOM", 0);
-                self.small_text(canvas, self.exit_hint("●fire ▲▼walk ◀▶turn"), 18);
-                self.small_text(canvas, self.exit_hint("● start   ◀ exit"), 25);
+                self.big_text_at(canvas, "DOOM", 2, 8);
+                for (n, line) in [
+                    "▲▼ walk  ◀▶ turn",
+                    "● fire / reload",
+                    "▲▼▲▼ pause",
+                    "● start",
+                    self.exit_hint("◀◀◀ exit"),
+                ]
+                .into_iter()
+                .enumerate()
+                {
+                    Text::with_text_style(
+                        line,
+                        Point::new(54, n as i32 * 6 + 1),
+                        ui::SMALL_TEXT,
+                        TextStyleBuilder::new().baseline(Baseline::Top).build(),
+                    )
+                    .draw(canvas)
+                    .unwrap();
+                }
             }
             State::Playing => {
                 self.draw_view(canvas);
                 self.draw_hud(canvas);
+                self.draw_ammo_hint(canvas);
             }
             State::Paused => {
                 self.draw_view(canvas);
                 self.banner(canvas, 7, 25);
                 self.text(canvas, "PAUSED", 8);
-                self.small_text(canvas, self.exit_hint("● resume  ◀ quit"), 20);
+                self.small_text(canvas, self.exit_hint("● resume ◀◀◀ quit"), 20);
             }
             State::Dead => {
                 self.draw_view(canvas);
                 self.banner(canvas, 7, 25);
                 self.text(canvas, "YOU DIED", 8);
-                self.small_text(canvas, self.exit_hint("● retry   ◀ exit"), 20);
+                self.small_text(canvas, self.exit_hint("● retry ◀◀◀ exit"), 20);
             }
             State::Won => {
                 self.draw_view(canvas);
                 self.banner(canvas, 7, 25);
                 self.text(canvas, "CLEARED!", 8);
-                self.small_text(canvas, self.exit_hint("● again   ◀ exit"), 20);
+                self.small_text(canvas, self.exit_hint("● again ◀◀◀ exit"), 20);
             }
         }
     }
@@ -254,6 +301,10 @@ impl Screen for Doom {
                 }
             },
         }
+    }
+
+    fn fixed_ticks(&self) -> bool {
+        true
     }
 
     fn tick_interval(&self) -> Option<Duration> {

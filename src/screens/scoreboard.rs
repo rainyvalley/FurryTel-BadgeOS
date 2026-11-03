@@ -186,6 +186,10 @@ impl<S: Screen> Screen for Scored<S> {
         }
     }
 
+    fn fixed_ticks(&self) -> bool {
+        matches!(self.phase, Phase::Playing) && self.inner.fixed_ticks()
+    }
+
     fn tick_interval(&self) -> Option<Duration> {
         match self.phase {
             Phase::Playing => self.inner.tick_interval(),

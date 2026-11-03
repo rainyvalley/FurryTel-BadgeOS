@@ -757,10 +757,56 @@ mod doom_tests {
         for index in 0..game.total() as usize {
             game.place(128 + (1 + index as i32) * 256, 128 + 13 * 256, 64);
             while game.kills() as usize == index {
+                if game.ammo() == 0 {
+                    game.fire();
+                    for _ in 0..3 {
+                        game.tick();
+                    }
+                    // the demons crept closer during the reload; put them back
+                    for other in index..game.total() as usize {
+                        game.put_enemy(other, 1 + other as i32, 14);
+                    }
+                }
                 assert!(game.fire());
             }
         }
         assert_eq!(game.state(), State::Won);
+    }
+
+    #[test]
+    fn the_magazine_empties_then_a_press_reloads_it() {
+        let mut game = DoomGame::new(1);
+        game.play();
+        game.place(128 + 256, 128 + 256, 128); // facing a wall
+        for _ in 0..6 {
+            game.fire();
+        }
+        assert_eq!(game.ammo(), 0);
+        game.fire(); // empty: starts the reload instead
+        assert!(game.reloading());
+        assert!(!game.fire(), "no shooting mid-reload");
+        for _ in 0..3 {
+            game.tick();
+        }
+        assert!(!game.reloading());
+        assert_eq!(game.ammo(), 6);
+    }
+
+    #[test]
+    fn demons_hunt_you_around_walls() {
+        let mut game = DoomGame::new(1);
+        game.play();
+        game.place(128 + 256, 128 + 256, 0); // the far corner from every demon
+        let before = (0..game.total() as usize)
+            .map(|i| game.enemy_cell(i))
+            .collect::<Vec<_>>();
+        for _ in 0..4 {
+            game.tick();
+        }
+        let after = (0..game.total() as usize)
+            .map(|i| game.enemy_cell(i))
+            .collect::<Vec<_>>();
+        assert_ne!(before, after, "they are coming");
     }
 
     #[test]

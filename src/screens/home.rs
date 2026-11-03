@@ -57,6 +57,10 @@ impl<const N: usize, const M: usize> Screen for Home<'_, N, M> {
         }
     }
 
+    fn fixed_ticks(&self) -> bool {
+        self.menu_open && self.menu.fixed_ticks()
+    }
+
     fn tick_interval(&self) -> Option<Duration> {
         if self.menu_open {
             self.menu.tick_interval()
@@ -71,9 +75,5 @@ impl<const N: usize, const M: usize> Screen for Home<'_, N, M> {
         } else {
             self.dashboard.tick()
         }
-    }
-
-    fn secret_ok(&self) -> bool {
-        !self.menu_open
     }
 }

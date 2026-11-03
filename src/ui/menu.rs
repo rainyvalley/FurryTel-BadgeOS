@@ -147,6 +147,10 @@ impl<const N: usize> Screen for Menu<'_, N> {
         Response::Redraw
     }
 
+    fn fixed_ticks(&self) -> bool {
+        self.open && self.items[self.selected].screen.fixed_ticks()
+    }
+
     fn tick_interval(&self) -> Option<embassy_time::Duration> {
         self.open
             .then(|| self.items[self.selected].screen.tick_interval())

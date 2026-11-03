@@ -15,9 +15,9 @@ const MAP: [&[u8; MAP_SIZE]; MAP_SIZE] = [
     b"################",
     b"#..............#",
     b"#.####..####...#",
-    b"#.#..........#.#",
+    b"#.#......E...#.#",
     b"#.#..####....#.#",
-    b"#....#..#......#",
+    b"#....#..#....E.#",
     b"###..#..#..#####",
     b"#......E.......#",
     b"#..##......##..#",
@@ -31,7 +31,12 @@ const MAP: [&[u8; MAP_SIZE]; MAP_SIZE] = [
 ];
 
 /// sin of 0..=64 quarter-turn steps, times 256
-const SIN: [i16; 65] = [0,6,13,19,25,31,38,44,50,56,62,68,74,80,86,92,98,104,109,115,121,126,132,137,142,147,152,157,162,167,172,177,181,185,190,194,198,202,206,209,213,216,220,223,226,229,231,234,237,239,241,243,245,247,248,250,251,252,253,254,255,255,256,256,256];
+const SIN: [i16; 65] = [
+    0, 6, 13, 19, 25, 31, 38, 44, 50, 56, 62, 68, 74, 80, 86, 92, 98, 104, 109, 115, 121, 126, 132,
+    137, 142, 147, 152, 157, 162, 167, 172, 177, 181, 185, 190, 194, 198, 202, 206, 209, 213, 216,
+    220, 223, 226, 229, 231, 234, 237, 239, 241, 243, 245, 247, 248, 250, 251, 252, 253, 254, 255,
+    255, 256, 256, 256,
+];
 
 /// Distance a forward or back press moves, and the angle a turn press covers.
 const STEP: i32 = 72;
@@ -42,6 +47,9 @@ const MARGIN: i32 = 56;
 const PLANE: i32 = 169;
 /// A wall one cell away fills this many pixels.
 const SCALE: i64 = 36;
+/// Rounds in a magazine, and ticks a reload takes.
+pub const MAGAZINE: u8 = 6;
+const RELOAD_TICKS: u8 = 3;
 const ENEMY_HP: i8 = 2;
 const PLAYER_HP: i16 = 100;
 
@@ -166,6 +174,9 @@ pub struct DoomGame {
     flash: u8,
     hurt: u8,
     ticks: u32,
+    ammo: u8,
+    /// ticks left before the magazine is full again; 0 when not reloading
+    reload: u8,
 }
 
 fn is_wall(x: i32, y: i32) -> bool {
@@ -195,6 +206,8 @@ impl DoomGame {
             flash: 0,
             hurt: 0,
             ticks: 0,
+            ammo: MAGAZINE,
+            reload: 0,
         };
         this.reset();
         this
@@ -209,6 +222,8 @@ impl DoomGame {
         self.flash = 0;
         self.hurt = 0;
         self.ticks = 0;
+        self.ammo = MAGAZINE;
+        self.reload = 0;
         self.count = 0;
         for (row, line) in MAP.iter().enumerate() {
             for (column, &cell) in line.iter().enumerate() {
@@ -246,6 +261,14 @@ impl DoomGame {
             0
         };
         u32::from(self.kills) * 100 + bonus
+    }
+
+    pub fn ammo(&self) -> u8 {
+        self.ammo
+    }
+
+    pub fn reloading(&self) -> bool {
+        self.reload > 0
     }
 
     pub fn total(&self) -> u8 {
@@ -316,11 +339,17 @@ impl DoomGame {
         })
     }
 
-    /// Shoot straight ahead.  Returns whether something was hit.
+    /// Shoot straight ahead.  With the magazine empty, this starts a reload instead.  Returns
+    /// whether something was hit.
     pub fn fire(&mut self) -> bool {
-        if self.state != State::Playing {
+        if self.state != State::Playing || self.reload > 0 {
             return false;
         }
+        if self.ammo == 0 {
+            self.reload = RELOAD_TICKS;
+            return false;
+        }
+        self.ammo -= 1;
         self.flash = 2;
         let wall = self.cast(64).distance >> 8;
         let mut target: Option<(usize, i32)> = None;
@@ -357,11 +386,6 @@ impl DoomGame {
         ((dx * fx + dy * fy) >> 8, (-dx * fy + dy * fx) >> 8)
     }
 
-    fn sees_player(&self, enemy: &Enemy) -> bool {
-        let (ex, ey) = enemy.centre();
-        (1..16).all(|n| !is_wall((ex + (self.x - ex) * n / 16) >> 8, (ey + (self.y - ey) * n / 16) >> 8))
-    }
-
     /// The demons move and bite.
     pub fn tick(&mut self) -> bool {
         if self.state != State::Playing {
@@ -370,7 +394,14 @@ impl DoomGame {
         self.ticks += 1;
         self.flash = self.flash.saturating_sub(1);
         self.hurt = 0;
+        if self.reload > 0 {
+            self.reload -= 1;
+            if self.reload == 0 {
+                self.ammo = MAGAZINE;
+            }
+        }
         let (px, py) = (self.x >> 8, self.y >> 8);
+        let map = self.distances();
         for index in 0..self.count {
             let enemy = self.enemies[index];
             if !enemy.alive() {
@@ -385,11 +416,8 @@ impl DoomGame {
                     self.hurt = 1;
                     self.enemies[index].cooldown = 3;
                 }
-            } else if close < 9
-                && (self.ticks + index as u32) % 2 == 0
-                && self.sees_player(&enemy)
-            {
-                self.advance(index, dx, dy);
+            } else if (self.ticks + index as u32) % 2 == 0 {
+                self.advance(index, &map);
             }
         }
         if self.health <= 0 {
@@ -398,27 +426,51 @@ impl DoomGame {
         true
     }
 
-    /// Move a demon a cell towards the player, along the longer gap if it can.
-    fn advance(&mut self, index: usize, dx: i32, dy: i32) {
-        let options = if dx.abs() >= dy.abs() {
-            [(dx.signum(), 0), (0, dy.signum())]
-        } else {
-            [(0, dy.signum()), (dx.signum(), 0)]
-        };
+    /// Steps from each cell to the player's, around walls; 255 where there is no way.
+    fn distances(&self) -> [[u8; MAP_SIZE]; MAP_SIZE] {
+        let mut map = [[255_u8; MAP_SIZE]; MAP_SIZE];
+        let mut queue = [(0_u8, 0_u8); MAP_SIZE * MAP_SIZE];
+        let (mut head, mut tail) = (0, 1);
+        let (px, py) = ((self.x >> 8) as usize, (self.y >> 8) as usize);
+        map[py][px] = 0;
+        queue[0] = (px as u8, py as u8);
+        while head < tail {
+            let (x, y) = queue[head];
+            head += 1;
+            for (dx, dy) in [(1, 0), (-1, 0), (0, 1), (0, -1)] {
+                let (nx, ny) = (i32::from(x) + dx, i32::from(y) + dy);
+                if is_wall(nx, ny) || map[ny as usize][nx as usize] != 255 {
+                    continue;
+                }
+                map[ny as usize][nx as usize] = map[y as usize][x as usize] + 1;
+                queue[tail] = (nx as u8, ny as u8);
+                tail += 1;
+            }
+        }
+        map
+    }
+
+    /// Move a demon a cell along the shortest way to the player.
+    fn advance(&mut self, index: usize, map: &[[u8; MAP_SIZE]; MAP_SIZE]) {
         let me = self.enemies[index];
-        for (sx, sy) in options {
-            if (sx, sy) == (0, 0) {
+        let mut best = map[me.y as usize][me.x as usize];
+        let mut target = None;
+        for (dx, dy) in [(1, 0), (-1, 0), (0, 1), (0, -1)] {
+            let (x, y) = (me.x + dx, me.y + dy);
+            if is_wall(x, y) || map[y as usize][x as usize] >= best {
                 continue;
             }
-            let (x, y) = (me.x + sx, me.y + sy);
             let taken = self.enemies[..self.count]
                 .iter()
                 .any(|other| other.alive() && other.x == x && other.y == y);
-            if !is_wall(x, y) && !taken && (x, y) != (self.x >> 8, self.y >> 8) {
-                self.enemies[index].x = x;
-                self.enemies[index].y = y;
-                return;
+            if !taken && (x, y) != (self.x >> 8, self.y >> 8) {
+                best = map[y as usize][x as usize];
+                target = Some((x, y));
             }
+        }
+        if let Some((x, y)) = target {
+            self.enemies[index].x = x;
+            self.enemies[index].y = y;
         }
     }
 
@@ -431,8 +483,16 @@ impl DoomGame {
         let ray_y = dy + plane_y * camera / 256;
 
         let far = i64::from(i32::MAX / 4);
-        let delta_x = if ray_x == 0 { far } else { (1 << 24) / i64::from(ray_x.abs()) };
-        let delta_y = if ray_y == 0 { far } else { (1 << 24) / i64::from(ray_y.abs()) };
+        let delta_x = if ray_x == 0 {
+            far
+        } else {
+            (1 << 24) / i64::from(ray_x.abs())
+        };
+        let delta_y = if ray_y == 0 {
+            far
+        } else {
+            (1 << 24) / i64::from(ray_y.abs())
+        };
         let (mut cell_x, mut cell_y) = (self.x >> 8, self.y >> 8);
         let (frac_x, frac_y) = (i64::from(self.x & 255), i64::from(self.y & 255));
         let (step_x, mut side_x) = if ray_x < 0 {
@@ -461,7 +521,11 @@ impl DoomGame {
                 break;
             }
         }
-        let distance = if side { side_x - delta_x } else { side_y - delta_y };
+        let distance = if side {
+            side_x - delta_x
+        } else {
+            side_y - delta_y
+        };
         Hit {
             distance: distance.max(1 << 12),
             side,
@@ -510,14 +574,29 @@ impl DoomGame {
             }
         }
 
-        // the pistol
-        frame.rect(58, 25, 12, 7, false);
-        frame.rect(61, 22, 6, 7, true);
-        frame.rect(59, 28, 10, 4, true);
+        // the pistol, lowered and raised again while reloading
+        let drop = match (self.reload, RELOAD_TICKS) {
+            (0, _) => 0,
+            (r, total) if r == total || r == 1 => 5,
+            _ => 10,
+        };
+        frame.rect(58, 25 + drop, 12, 7, false);
+        frame.rect(61, 22 + drop, 6, 7, true);
+        frame.rect(59, 28 + drop, 10, 4, true);
         if self.flash > 0 {
             frame.rect(60, 16, 8, 6, false);
             for (x, y, w, h) in [(63, 14, 2, 8), (60, 17, 8, 2), (61, 15, 6, 6)] {
                 frame.rect(x, y, w, h, true);
+            }
+        }
+
+        // the magazine: a bar for each round, hollow once spent
+        frame.rect(100, 25, 28, 7, false);
+        for round in 0..MAGAZINE {
+            let x = 102 + i32::from(round) * 4;
+            frame.rect(x, 26, 3, 6, true);
+            if round >= self.ammo {
+                frame.rect(x + 1, 27, 1, 4, false);
             }
         }
         if self.hurt > 0 {
@@ -559,6 +638,11 @@ impl DoomGame {
     pub fn put_enemy(&mut self, index: usize, x: i32, y: i32) {
         self.enemies[index].x = x;
         self.enemies[index].y = y;
+    }
+
+    #[cfg(test)]
+    pub fn enemy_cell(&self, index: usize) -> (i32, i32) {
+        (self.enemies[index].x, self.enemies[index].y)
     }
 
     #[cfg(test)]

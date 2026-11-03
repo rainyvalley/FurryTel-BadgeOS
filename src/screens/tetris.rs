@@ -249,6 +249,10 @@ impl Tetris {
 }
 
 impl Screen for Tetris {
+    fn final_score(&self) -> Option<u32> {
+        (self.game.state() == State::Dead).then(|| self.game.score())
+    }
+
     fn enter(&mut self) {
         self.game.reset();
         self.exit_armed = 0;

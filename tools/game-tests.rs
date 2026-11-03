@@ -432,6 +432,55 @@ mod record_tests {
     }
 
     #[test]
+    fn scores_stay_sorted_and_only_the_best_three_are_kept() {
+        let mut data = record::defaults();
+        assert!(!data.qualifies(0, 0), "nothing never qualifies");
+        assert_eq!(data.add_score(0, *b"AAA", 10), Some(0));
+        assert_eq!(data.add_score(0, *b"BBB", 30), Some(0));
+        assert_eq!(data.add_score(0, *b"CCC", 20), Some(1));
+        assert_eq!(data.add_score(0, *b"DDD", 5), None, "the list is full of better");
+        assert_eq!(data.add_score(0, *b"EEE", 20), Some(2), "a tie goes below");
+        let names: Vec<_> = data.scores(0).iter().map(|e| e.name).collect();
+        assert_eq!(names, [*b"BBB", *b"CCC", *b"EEE"]);
+        assert_eq!(data.scores(1)[0].score, 0, "other games are untouched");
+    }
+
+    #[test]
+    fn scores_survive_the_flash_round_trip() {
+        let mut data = record::defaults();
+        data.set_note("hi");
+        data.add_score(3, *b"XYZ", 800);
+        data.add_score(4, *b"DOM", 1500);
+        let mut buffer = [0; RECORD_MAX];
+        let len = record::encode(&data, &mut buffer);
+        let decoded = record::decode(&buffer[..len]).expect("decodes");
+        assert_eq!(decoded.note(), "hi");
+        assert_eq!(decoded.scores(3)[0].name, *b"XYZ");
+        assert_eq!(decoded.scores(3)[0].score, 800);
+        assert_eq!(decoded.scores(4)[0].score, 1500);
+
+        let mut corrupt = buffer;
+        corrupt[20] ^= 1;
+        assert!(record::decode(&corrupt[..len]).is_none());
+    }
+
+    #[test]
+    fn a_second_version_record_loads_with_empty_scores() {
+        let mut buffer = [0u8; RECORD_MAX];
+        buffer[0..4].copy_from_slice(&record::MAGIC.to_le_bytes());
+        buffer[4] = 2;
+        buffer[16] = 2;
+        buffer[17..19].copy_from_slice(b"hi");
+        let checksum = buffer[..19]
+            .iter()
+            .fold(0u32, |sum, &byte| sum.wrapping_add(u32::from(byte)));
+        buffer[19..23].copy_from_slice(&checksum.to_le_bytes());
+        let decoded = record::decode(&buffer[..23]).expect("decodes");
+        assert_eq!(decoded.note(), "hi");
+        assert_eq!(decoded.scores(0)[0].score, 0);
+    }
+
+    #[test]
     fn a_short_record_is_rejected() {
         assert!(record::decode(&[]).is_none());
         assert!(record::decode(&[0; 12]).is_none());

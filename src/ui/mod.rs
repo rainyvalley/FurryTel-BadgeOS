@@ -68,6 +68,11 @@ pub trait Screen {
         Response::Ignored
     }
 
+    /// The score of a game that has just ended, for the scoreboard; `None` while it is still on.
+    fn final_score(&self) -> Option<u32> {
+        None
+    }
+
     /// Whether the secret code is listened for right now.  Only the home screen wants it, so
     /// games and menus keep every button press for themselves.
     fn secret_ok(&self) -> bool {

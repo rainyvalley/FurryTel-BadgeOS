@@ -450,7 +450,59 @@ mod tetris_tests {
 
     #[test]
     fn the_i_piece_rotates_to_a_column() {
-        assert_eq!(TetrisGame::rotate_mask(TetrisGame::piece_mask(0)), 0x4444);
+        assert_eq!(TetrisGame::rotate_mask(0, TetrisGame::piece_mask(0)), 0x4444);
+    }
+
+    #[test]
+    fn the_o_piece_never_moves_when_rotated() {
+        let mut game = TetrisGame::new(1);
+        game.play();
+        game.set_piece(1, 3, 5);
+        let before = (game.piece().mask, game.piece().x, game.piece().y);
+        for _ in 0..4 {
+            assert!(game.rotate_piece());
+            let now = game.piece();
+            assert_eq!((now.mask, now.x, now.y), before);
+        }
+    }
+
+    #[test]
+    fn t_piece_spins_in_place_through_the_srs_states() {
+        let mut game = TetrisGame::new(1);
+        game.play();
+        game.set_piece(2, 2, 5);
+        let expected = [0x0262, 0x0270, 0x0232, 0x0072]; // R, 2, L, 0 in a 3x3 box
+        for mask in expected {
+            assert!(game.rotate_piece());
+            assert_eq!(game.piece().mask, mask);
+            assert_eq!((game.piece().x, game.piece().y), (2, 5), "no drift");
+        }
+    }
+
+    #[test]
+    fn four_turns_return_every_piece_to_its_spawn_shape() {
+        for kind in 0..7 {
+            let mut game = TetrisGame::new(1);
+            game.play();
+            game.set_piece(kind, 2, 8);
+            for _ in 0..4 {
+                assert!(game.rotate_piece());
+            }
+            assert_eq!(game.piece().mask, TetrisGame::piece_mask(kind));
+            assert_eq!((game.piece().x, game.piece().y), (2, 8));
+        }
+    }
+
+    #[test]
+    fn a_vertical_i_against_the_wall_kicks_flat() {
+        let mut game = TetrisGame::new(1);
+        game.play();
+        game.set_piece(0, 5, 8);
+        assert!(game.rotate_piece()); // upright in column 7, the right wall
+        assert_eq!(game.piece().mask, 0x4444);
+        assert!(game.rotate_piece(), "SRS kicks it left instead of failing");
+        assert_eq!(game.piece().mask, 0x0F00);
+        assert_eq!(game.piece().x, 4, "shifted one column left");
     }
 
     #[test]

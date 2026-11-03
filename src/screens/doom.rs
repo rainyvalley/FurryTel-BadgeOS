@@ -152,6 +152,10 @@ impl Doom {
 }
 
 impl Screen for Doom {
+    fn final_score(&self) -> Option<u32> {
+        matches!(self.game.state(), State::Dead | State::Won).then(|| self.game.score())
+    }
+
     fn enter(&mut self) {
         self.game.reset();
         self.exit_armed = 0;

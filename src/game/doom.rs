@@ -238,6 +238,16 @@ impl DoomGame {
         self.kills
     }
 
+    /// 100 a demon, and for clearing the level, a bonus for the health left.
+    pub fn score(&self) -> u32 {
+        let bonus = if self.state == State::Won {
+            500 + self.health.max(0) as u32 * 5
+        } else {
+            0
+        };
+        u32::from(self.kills) * 100 + bonus
+    }
+
     pub fn total(&self) -> u8 {
         self.count as u8
     }

@@ -105,6 +105,7 @@ flashing your own badge.
 | Links | Up/Down or Left/Right turn pages, Center goes back |
 | Games | D-pad plays, Center starts/pauses/retries, three Lefts quit (Flappy flaps on Center) |
 | Doom | Up/Down walk, Left/Right turn, Center fires; Up Down Up Down pauses |
+| Scores | Up/Down flip between games, Left goes back |
 | Tetris | turn the badge clockwise — the buttons turn with it: up=right, down=left, left=pause, right=drops to the bottom, Center rotates |
 | Colors | Left/Right pick a field, Up/Down change it, Center saves and finishes |
 | LEDs | Left/Right pick a field, Up/Down change it, Center saves and finishes |

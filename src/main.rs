@@ -141,11 +141,12 @@ async fn main(spawner: Spawner) {
     let mut led_colors = screens::LedColors::new();
     let mut leds = screens::Leds::new();
 
-    let mut snake_game = screens::Snake::new(unique_id);
-    let mut flappy = screens::Flappy::new(unique_id);
-    let mut frogger = screens::Crossy::new(unique_id);
-    let mut tetris = screens::Tetris::new(unique_id);
-    let mut doom = screens::Doom::new(unique_id);
+    let mut snake_game = screens::Scored::new(0, screens::Snake::new(unique_id));
+    let mut flappy = screens::Scored::new(1, screens::Flappy::new(unique_id));
+    let mut frogger = screens::Scored::new(2, screens::Crossy::new(unique_id));
+    let mut tetris = screens::Scored::new(3, screens::Tetris::new(unique_id));
+    let mut doom = screens::Scored::new(4, screens::Doom::new(unique_id));
+    let mut scoreboard = screens::Scoreboard::new();
     let mut games = Menu::with_header(
         "◀◀◀ quit   ● play",
         [
@@ -154,6 +155,7 @@ async fn main(spawner: Spawner) {
             Item::new("Frogger", &mut frogger),
             Item::new("Tetris", &mut tetris),
             Item::new("Doom", &mut doom),
+            Item::new("Scores", &mut scoreboard),
         ],
     );
 

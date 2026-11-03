@@ -55,6 +55,16 @@ pub fn set_leds(mode: u8, levels: [u8; 3]) {
     });
 }
 
+pub fn qualifies(game: usize, score: u32) -> bool {
+    DATA.lock(|slot| slot.borrow().qualifies(game, score))
+}
+
+/// Record a score and write it to flash.
+pub fn add_score(game: usize, name: [u8; 3], score: u32) {
+    DATA.lock(|slot| slot.borrow_mut().add_score(game, name, score));
+    save();
+}
+
 /// Write the current settings to flash.  This takes a few milliseconds and stops the world while
 /// the flash is erased and programmed.
 pub fn save() {

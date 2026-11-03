@@ -33,7 +33,7 @@ fn draw_list(canvas: &mut Canvas, game: usize) {
     let data = store::data();
     centred(canvas, record::GAME_NAMES[game], 0, false);
     for (rank, entry) in data.scores(game).iter().enumerate() {
-        let mut line = heapless::String::<24>::new();
+        let mut line = heapless::String::<32>::new();
         let name = core::str::from_utf8(&entry.name).unwrap_or("---");
         if entry.score == 0 {
             write!(&mut line, "{}  ---", rank + 1).unwrap();
@@ -137,10 +137,10 @@ impl<S: Screen> Screen for Scored<S> {
             Phase::Playing => self.inner.draw(canvas),
             Phase::Initials { name, cursor } => {
                 let score = self.inner.final_score().unwrap_or(0);
-                let mut line = heapless::String::<24>::new();
+                let mut line = heapless::String::<32>::new();
                 write!(&mut line, "NEW HIGH SCORE {score}").unwrap();
                 centred(canvas, &line, 0, false);
-                let mut letters = heapless::String::<8>::new();
+                let mut letters = heapless::String::<12>::new();
                 for (n, &letter) in name.iter().enumerate() {
                     letters.push(if n == *cursor { '[' } else { ' ' }).unwrap();
                     letters.push(letter as char).unwrap();

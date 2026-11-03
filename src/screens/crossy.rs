@@ -153,7 +153,7 @@ impl Screen for Crossy {
     fn draw(&self, canvas: &mut Canvas) {
         match self.game.state() {
             State::Ready => {
-                big_text(canvas, "CROSSY", 0);
+                big_text(canvas, "FROGGER", 0);
                 small_text(canvas, self.exit_hint("● start   ◀ exit"), 19);
             }
             State::Playing => {

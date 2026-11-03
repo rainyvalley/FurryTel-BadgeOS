@@ -64,6 +64,25 @@ impl Flappy {
         }
     }
 
+    /// The number of pipes passed so far, top left.
+    fn draw_score(&self, canvas: &mut Canvas) {
+        let mut score = heapless::String::<12>::new();
+        write!(&mut score, "{}", self.game.score()).unwrap();
+        let width = score.len() as u32 * 6 + 3;
+        Rectangle::new(Point::new(0, 0), Size::new(width, 11))
+            .into_styled(PrimitiveStyle::with_fill(BinaryColor::Off))
+            .draw(canvas)
+            .unwrap();
+        Text::with_text_style(
+            score.as_str(),
+            Point::new(1, 1),
+            ui::TEXT,
+            TextStyleBuilder::new().baseline(Baseline::Top).build(),
+        )
+        .draw(canvas)
+        .unwrap();
+    }
+
     fn draw_field(&self, canvas: &mut Canvas) {
         let ink = PrimitiveStyle::with_fill(BinaryColor::On);
 
@@ -166,6 +185,7 @@ impl Screen for Flappy {
             }
             State::Playing => {
                 self.draw_field(canvas);
+                self.draw_score(canvas);
                 if self.exit_armed > 0 {
                     banner(canvas, 0, 8);
                     small_text(canvas, self.exit_hint(""), 1);

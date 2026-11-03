@@ -1,34 +1,34 @@
-# Furrytel BadgeOS — Tines Edition
+# FurryTel BadgeOS
 
-A friendly firmware for the [FurryTel badge](https://furrytel.net): your name and a paw, your links
-as big QR codes, pictures and a scratch note, and a few games for when you are waiting in line.
+Firmware for the [FurryTel badge](https://furrytel.net) (RP2040, 128×32 monochrome display, five
+buttons, three LEDs and an RGB backlight). It shows a name card, QR code link pages, pictures and a
+note, and includes five games with saved high scores. Content is set in `badge.yaml`.
 
 ![The home screen, the files list and the LED settings](docs/screens.png)
 
 ## What it does
 
-- **Home**: your name, a paw, and your species or title underneath.
+- **Home**: the name and species or title from `badge.yaml`, with a paw graphic.
 - **Files**: pictures (baked in from `badge.yaml`) and one note you type on the badge with the
-  on-screen keyboard. The note is kept in flash, so it survives changing the batteries.
-- **Links**: one page per link, each with the biggest QR code a 32-pixel-tall screen allows. Here is
-  an example card:
+  on-screen keyboard. The note is stored in flash.
+- **Links**: one page per link, each with a 29×29 QR code, a title and a label. Example card:
 
   ![The GitHub link card](docs/link-card.png)
 
 - **Games**: Snake, Flappy, Frogger, a knock-off Tetris (with standard SRS rotation), and Doom (a
-  tiny raycaster). The D-pad plays; three Lefts leave a game so a stray press does not (in Tetris,
-  three "lefts" at the new view leaves). Tetris is drawn sideways — turn the badge clockwise to play:
+  tiny raycaster). The D-pad plays; three Lefts leave a game (in Tetris,
+  three presses of the button on the player's left). Tetris is drawn sideways, with the badge
+  turned clockwise:
 
   ![The Tetris start screen and a game in progress, sideways](docs/tetris.png)
 - **Scores**: every game keeps its top three, saved in flash. A score that makes the list asks for
   three initials (Up/Down change the letter, Left/Right move, Center confirms). The Scores screen
   in the Games menu shows each game's list. The secret Snake is not scored.
-- **Colors**: presets and RGB sliders for the backlight, plus a separate color for the flash on
-  every button press.
-- **LEDs**: the three little lights can blink randomly, hold a color, chase, or glow when you press
-  a button.
+- **Colors**: backlight presets and RGB sliders, plus a separate color for the flash on each button
+  press.
+- **LEDs**: the three LEDs can blink randomly, hold a color, chase, or light on a button press.
 - **About / Status / Bootloader**: firmware info, battery and uptime, and a reboot into the USB
-  bootloader for reflashing.
+  bootloader.
 - **A secret**: enter ↑↑↓↓←→←→●● on the home screen to open Snake.
 
 ## Download, Customize, Flash
@@ -37,10 +37,10 @@ as big QR codes, pictures and a scratch note, and a few games for when you are w
 
 ```sh
 mkdir badgeos && cd badgeos
-curl -L https://github.com/rainyvalley/badgeos/archive/refs/heads/main.tar.gz | tar -xz --strip-components=1
+curl -L https://github.com/rainyvalley/FurryTel-BadgeOS/archive/refs/heads/main.tar.gz | tar -xz --strip-components=1
 ```
 
-With git instead: `git clone https://github.com/rainyvalley/badgeos.git`.
+With git instead: `git clone https://github.com/rainyvalley/FurryTel-BadgeOS.git`.
 
 ### 2. Customize
 
@@ -62,11 +62,11 @@ pictures:
 ```
 
 A name of up to 8 characters uses the big font; longer names shrink to fit, and 16 characters is
-the hard limit. Each link's URL has to fit a 29×29 QR code, about 53 characters.
+the hard limit. Each link's URL must fit a 29×29 QR code, about 53 characters.
 
 Pictures are fitted inside the screen, centred, and turned into black and white; small images stay
-small unless you set `scale: 2` (or use `dither: true` / `threshold: 128` for a different look).
-Logos and line art work best.
+small unless `scale: 2` is set (or use `dither: true` / `threshold: 128` for a different look).
+Logos and line art convert best.
 
 Then build the firmware:
 
@@ -79,7 +79,7 @@ python3 tools/build.py                               # writes dist/badgeos.uf2
 `tools/build.py` regenerates the QR codes and pictures, compiles the firmware, and wraps it as a
 UF2 file.
 
-**More than one badge?** Copy `badge.yaml` to `badges/someone.yaml`, edit it, and build that one:
+**Multiple badges:** copy `badge.yaml` to `badges/someone.yaml`, edit it, and build that one:
 
 ```sh
 mkdir -p badges
@@ -87,8 +87,8 @@ cp badge.yaml badges/someone.yaml
 python3 tools/build.py --config badges/someone.yaml   # writes dist/someone.uf2
 ```
 
-Only one config is generated at a time (`src/generated.rs`), so rebuild with your own before
-flashing your own badge.
+Only one config is generated at a time (`src/generated.rs`); rebuild with the matching config
+before flashing each badge.
 
 ### 3. Flash
 
@@ -118,7 +118,7 @@ flashing your own badge.
 ## Credits
 
 This is an unofficial project, built on the [FurryTel badge firmware][original] and the
-[FurryTel badge hardware][hardware] from [furrytel.net](https://furrytel.net). Thank you! The
+[FurryTel badge hardware][hardware] from [furrytel.net](https://furrytel.net). The
 FurryTel name and logo are theirs, and the original display, menu and keyboard code is the
 foundation everything here stands on.
 
